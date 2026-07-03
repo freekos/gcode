@@ -5,12 +5,16 @@
 //! - Agents write code only — git is denied to them; all git ops are explicit human actions.
 //! - Single writer for state; git operations serialized per repository; no races by construction.
 
+pub mod actor;
 pub mod domain;
 pub mod error;
+pub mod queues;
 pub mod state;
 
+pub use actor::StateHandle;
 pub use domain::{slugify, Group, Project, Repo, Task, TaskRepo, TaskStatus};
 pub use error::{CoreError, Result};
+pub use queues::KeyedQueues;
 pub use state::State;
 
 pub fn version() -> &'static str {
