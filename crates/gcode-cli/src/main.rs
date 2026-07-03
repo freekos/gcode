@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use gcode_core::{scan, State};
+use gcode_core::archive::{archive_task_full, restore_task_full};
+use gcode_core::provision::provision_task;
+use gcode_core::{scan, KeyedQueues, State, StateHandle};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -16,12 +18,42 @@ enum Command {
         #[command(subcommand)]
         cmd: ProjectCmd,
     },
+    /// Manage tasks (a task = worktree per affected repo under one root)
+    Task {
+        #[command(subcommand)]
+        cmd: TaskCmd,
+    },
     /// Show the operation journal
     Journal {
         /// How many recent entries to show
         #[arg(short = 'n', long, default_value_t = 20)]
         limit: i64,
     },
+}
+
+#[derive(Subcommand)]
+enum TaskCmd {
+    /// Create a task: one git worktree per repo, branch created immediately
+    New {
+        /// Project name
+        project: String,
+        /// Task title (slug and branch are derived from it)
+        title: String,
+        /// Comma-separated repo names (default: all repos of the project)
+        #[arg(long, value_delimiter = ',')]
+        repos: Vec<String>,
+    },
+    /// List tasks of a project
+    Ls {
+        project: String,
+        /// Include archived tasks
+        #[arg(long)]
+        all: bool,
+    },
+    /// Archive: save uncommitted work as a patch, remove worktrees (restorable)
+    Archive { project: String, slug: String },
+    /// Restore an archived task: worktrees re-attached, saved patches applied
+    Restore { project: String, slug: String },
 }
 
 #[derive(Subcommand)]
@@ -107,6 +139,83 @@ fn main() {
                 }
             }
         },
+        Command::Task { cmd } => {
+            let handle = StateHandle::spawn(open_state());
+            let queues = KeyedQueues::new();
+            match cmd {
+                TaskCmd::New {
+                    project,
+                    title,
+                    repos,
+                } => match provision_task(&handle, &queues, &project, &title, &repos) {
+                    Ok(res) => {
+                        println!(
+                            "task '{}' created (branch {}):",
+                            res.task.slug, res.task.branch
+                        );
+                        println!("  root: {}", res.root.display());
+                        for (name, wt) in &res.worktrees {
+                            println!("  {name}  ->  {}", wt.display());
+                        }
+                    }
+                    Err(e) => die(e),
+                },
+                TaskCmd::Ls { project, all } => {
+                    let p = handle
+                        .call(move |st| st.project_by_name(&project))
+                        .unwrap_or_else(|e| die(e));
+                    let pid = p.id;
+                    let tasks = handle
+                        .call(move |st| st.list_tasks(pid, all))
+                        .unwrap_or_default();
+                    if tasks.is_empty() {
+                        println!("no tasks — try: gcode task new {} \"<title>\"", p.name);
+                        return;
+                    }
+                    for t in tasks {
+                        let arch = if t.archived_at.is_some() {
+                            "  [archived]"
+                        } else {
+                            ""
+                        };
+                        println!(
+                            "{:<24} {:<12} {}{}",
+                            t.slug,
+                            t.status.as_str(),
+                            t.title,
+                            arch
+                        );
+                    }
+                }
+                TaskCmd::Archive { project, slug } => {
+                    let tid = resolve_task(&handle, &project, &slug);
+                    match archive_task_full(&handle, &queues, tid) {
+                        Ok(rep) => {
+                            println!("task '{slug}' archived (worktrees removed, branches kept)");
+                            for (repo, patch) in rep.patches {
+                                println!("  ⚠ uncommitted work in {repo} saved to {patch}");
+                            }
+                        }
+                        Err(e) => die(e),
+                    }
+                }
+                TaskCmd::Restore { project, slug } => {
+                    let tid = resolve_task(&handle, &project, &slug);
+                    match restore_task_full(&handle, &queues, tid) {
+                        Ok(rep) => {
+                            println!("task '{slug}' restored (worktrees re-attached)");
+                            for p in rep.applied_patches {
+                                println!("  ✓ applied saved patch {p}");
+                            }
+                            for p in rep.failed_patches {
+                                println!("  ✗ patch did NOT apply cleanly, kept for manual recovery: {p}");
+                            }
+                        }
+                        Err(e) => die(e),
+                    }
+                }
+            }
+        }
         Command::Journal { limit } => {
             let st = open_state();
             for (ts, action, entity, detail) in st.journal_recent(limit).unwrap_or_default() {
@@ -116,4 +225,16 @@ fn main() {
             }
         }
     }
+}
+
+/// Resolve "<project> <slug>" to a task id or exit with a clear error.
+fn resolve_task(handle: &StateHandle, project: &str, slug: &str) -> i64 {
+    let project = project.to_string();
+    let slug = slug.to_string();
+    handle
+        .call(move |st| {
+            let p = st.project_by_name(&project)?;
+            st.task_by_slug(p.id, &slug).map(|t| t.id)
+        })
+        .unwrap_or_else(|e| die(e))
 }

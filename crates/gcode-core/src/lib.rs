@@ -6,6 +6,7 @@
 //! - Single writer for state; git operations serialized per repository; no races by construction.
 
 pub mod actor;
+pub mod archive;
 pub mod domain;
 pub mod error;
 pub mod git;

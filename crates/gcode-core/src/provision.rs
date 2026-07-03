@@ -116,6 +116,7 @@ pub fn provision_task(
                 )?;
             }
             copy_env_files(repo_path, &wt);
+            clone_node_modules(repo_path, &wt);
             Ok(())
         });
         match res {
@@ -206,5 +207,35 @@ fn copy_env_files(repo_path: &Path, wt: &Path) {
                 let _ = std::fs::copy(e.path(), wt.join(&name));
             }
         }
+    }
+}
+
+/// Give the worktree its own `node_modules` as a copy-on-write clone of the main
+/// checkout's (DESIGN.md §4): instant and ~0 extra disk on APFS/btrfs, fully isolated
+/// (a symlink would share caches and break Vite/esbuild). Never runs an install.
+/// Cascade: `cp -c` (macOS clonefile) → `cp --reflink=auto` (Linux CoW) → plain copy.
+fn clone_node_modules(repo_path: &Path, wt: &Path) {
+    let src = repo_path.join("node_modules");
+    if !src.is_dir() || wt.join("node_modules").exists() {
+        return;
+    }
+    let src_s = src.to_string_lossy().to_string();
+    let dst_s = wt.join("node_modules").to_string_lossy().to_string();
+    let attempts: [&[&str]; 3] = [
+        &["-Rc", &src_s, &dst_s],                  // macOS APFS clonefile
+        &["-a", "--reflink=auto", &src_s, &dst_s], // Linux CoW (btrfs/xfs)
+        &["-R", &src_s, &dst_s],                   // plain copy — correctness over speed
+    ];
+    for args in attempts {
+        let ok = std::process::Command::new("cp")
+            .args(args)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok {
+            return;
+        }
+        // a failed attempt may leave a partial tree — clear it before the next strategy
+        let _ = std::fs::remove_dir_all(wt.join("node_modules"));
     }
 }
