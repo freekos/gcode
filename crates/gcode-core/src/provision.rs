@@ -152,7 +152,7 @@ pub fn provision_task(
         return Err(err);
     }
 
-    // Task context file at the root (agent-facing files arrive in Phase 2).
+    // Task context file at the root.
     let repos_list = created
         .iter()
         .map(|(n, _)| format!("- {n}"))
@@ -164,6 +164,7 @@ pub fn provision_task(
             "# {title}\n\nslug: {slug}\nbranch: {branch}\n\nRepos (worktrees in this folder):\n{repos_list}\n"
         ),
     );
+    write_agent_guardrails(&root, title, &repos_list);
 
     Ok(ProvisionResult {
         task,
@@ -196,6 +197,38 @@ pub fn remove_worktrees(handle: &StateHandle, queues: &KeyedQueues, task_id: i64
         }
     }
     Ok(())
+}
+
+/// Agent guardrails (Phase 2, "agents never touch git" — enforced, not requested):
+/// `.claude/settings.json` with DENY rules for git/dangerous commands, and CLAUDE.md
+/// with the task rules. Claude Code loads both from the task root (agent cwd).
+pub fn write_agent_guardrails(root: &Path, title: &str, repos_list: &str) {
+    let claude_dir = root.join(".claude");
+    let _ = std::fs::create_dir_all(&claude_dir);
+    let settings = r#"{
+  "permissions": {
+    "deny": [
+      "Bash(git:*)",
+      "Bash(sudo:*)",
+      "Bash(gh:*)",
+      "Bash(glab:*)"
+    ]
+  }
+}
+"#;
+    let _ = std::fs::write(claude_dir.join("settings.json"), settings);
+    let claude_md = format!(
+        "# Task: {title}\n\n\
+         You are working on this task inside gcode. The repos below are YOUR worktrees — \
+         each subfolder is a separate repository checked out on the task branch:\n{repos_list}\n\n\
+         ## Rules\n\
+         - Work ONLY inside these worktree folders.\n\
+         - Do NOT run git (or gh/glab). Commits, branches, merges and PRs are done by the human \
+           through gcode — git commands are technically denied to you.\n\
+         - Do NOT install dependencies unless the task explicitly requires it.\n\
+         - When you finish, summarize what you changed per repo.\n"
+    );
+    let _ = std::fs::write(root.join("CLAUDE.md"), claude_md);
 }
 
 /// Copy `.env*` files (except tracked `.env.example`) from the main checkout.

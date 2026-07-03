@@ -465,6 +465,29 @@ impl State {
         Ok(())
     }
 
+    // ---- agent run lock (one running agent per task, atomic via the actor) ----
+
+    /// Try to mark the task as running. Fails loudly when an agent is already
+    /// working on it or the task is archived — the caller shows this to the user.
+    pub fn try_start_agent(&mut self, task_id: i64) -> Result<()> {
+        let t = self.task_by_id(task_id)?;
+        if t.archived_at.is_some() {
+            return Err(CoreError::Invalid(format!("task '{}' is archived", t.slug)));
+        }
+        if t.status == TaskStatus::Running {
+            return Err(CoreError::Invalid(format!(
+                "an agent is already working on task '{}'",
+                t.slug
+            )));
+        }
+        self.set_task_status(task_id, TaskStatus::Running)
+    }
+
+    /// Agent finished: the task moves to review (facts: the process exited).
+    pub fn finish_agent(&mut self, task_id: i64) -> Result<()> {
+        self.set_task_status(task_id, TaskStatus::Review)
+    }
+
     // ---- threads ----
 
     /// Register a new thread of a task (metadata only — the transcript lives with the engine).

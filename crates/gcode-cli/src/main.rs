@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use gcode_core::archive::{archive_task_full, restore_task_full};
+use gcode_core::engine::{AgentEvent, ClaudeEngine};
 use gcode_core::provision::provision_task;
+use gcode_core::runner::run_thread;
 use gcode_core::{scan, KeyedQueues, State, StateHandle};
 use std::path::PathBuf;
 
@@ -22,6 +24,11 @@ enum Command {
     Task {
         #[command(subcommand)]
         cmd: TaskCmd,
+    },
+    /// Agent threads inside a task (conversation = thread; git denied to agents)
+    Thread {
+        #[command(subcommand)]
+        cmd: ThreadCmd,
     },
     /// Show the operation journal
     Journal {
@@ -54,6 +61,24 @@ enum TaskCmd {
     Archive { project: String, slug: String },
     /// Restore an archived task: worktrees re-attached, saved patches applied
     Restore { project: String, slug: String },
+}
+
+#[derive(Subcommand)]
+enum ThreadCmd {
+    /// Start a NEW thread: runs the agent in the task root, streams the reply
+    New {
+        project: String,
+        slug: String,
+        prompt: String,
+    },
+    /// Continue the most recent thread of the task
+    Continue {
+        project: String,
+        slug: String,
+        prompt: String,
+    },
+    /// List threads of a task
+    Ls { project: String, slug: String },
 }
 
 #[derive(Subcommand)]
@@ -216,6 +241,56 @@ fn main() {
                 }
             }
         }
+        Command::Thread { cmd } => {
+            let handle = StateHandle::spawn(open_state());
+            let engine = ClaudeEngine::default();
+            match cmd {
+                ThreadCmd::New {
+                    project,
+                    slug,
+                    prompt,
+                } => {
+                    let tid = resolve_task(&handle, &project, &slug);
+                    run_and_stream(&handle, &engine, tid, None, &prompt);
+                }
+                ThreadCmd::Continue {
+                    project,
+                    slug,
+                    prompt,
+                } => {
+                    let tid = resolve_task(&handle, &project, &slug);
+                    let latest = handle
+                        .call(move |st| st.list_threads(tid))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .next();
+                    let Some(t) = latest else {
+                        die(format!(
+                            "task '{slug}' has no threads yet — use: gcode thread new"
+                        ));
+                    };
+                    run_and_stream(&handle, &engine, tid, Some(t.id), &prompt);
+                }
+                ThreadCmd::Ls { project, slug } => {
+                    let tid = resolve_task(&handle, &project, &slug);
+                    let threads = handle
+                        .call(move |st| st.list_threads(tid))
+                        .unwrap_or_default();
+                    if threads.is_empty() {
+                        println!(
+                            "no threads — try: gcode thread new {project} {slug} \"<prompt>\""
+                        );
+                        return;
+                    }
+                    for t in threads {
+                        println!(
+                            "#{:<4} {:<8} {}  (last activity {})",
+                            t.id, t.engine, t.title, t.last_activity
+                        );
+                    }
+                }
+            }
+        }
         Command::Journal { limit } => {
             let st = open_state();
             for (ts, action, entity, detail) in st.journal_recent(limit).unwrap_or_default() {
@@ -224,6 +299,53 @@ fn main() {
                 println!("{ts}  {action:<16} {entity:<20} {detail}");
             }
         }
+    }
+}
+
+/// Run a thread (new or continue) streaming the reply to stdout.
+fn run_and_stream(
+    handle: &StateHandle,
+    engine: &ClaudeEngine,
+    task_id: i64,
+    thread_id: Option<i64>,
+    prompt: &str,
+) {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+    let res = run_thread(
+        handle,
+        engine,
+        task_id,
+        thread_id,
+        prompt,
+        &mut |ev| match ev {
+            AgentEvent::TextDelta(t) | AgentEvent::WholeText(t) => {
+                let _ = write!(out, "{t}");
+                let _ = out.flush();
+            }
+            AgentEvent::ToolUse(n) => {
+                let _ = writeln!(out, "\n[tool: {n}]");
+            }
+            _ => {}
+        },
+    );
+    match res {
+        Ok(o) => {
+            println!();
+            if o.ok {
+                println!(
+                    "— thread #{} done (session {})",
+                    o.thread.id,
+                    o.thread.session_id.unwrap_or_default()
+                );
+            } else {
+                die(format!(
+                    "agent failed: {}",
+                    o.error.unwrap_or_else(|| "unknown".into())
+                ));
+            }
+        }
+        Err(e) => die(e),
     }
 }
 

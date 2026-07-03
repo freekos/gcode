@@ -13,6 +13,7 @@ pub mod error;
 pub mod git;
 pub mod provision;
 pub mod queues;
+pub mod runner;
 pub mod scan;
 pub mod state;
 
