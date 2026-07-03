@@ -11,6 +11,9 @@ use std::path::Path;
 /// Current schema version. Bump together with a new `migrate_to_*` step.
 const SCHEMA_VERSION: i64 = 1;
 
+/// One journal line: (ts, action, entity, detail).
+pub type JournalEntry = (String, String, Option<String>, Option<String>);
+
 pub struct State {
     conn: Connection,
 }
@@ -433,10 +436,7 @@ impl State {
     }
 
     /// Recent journal lines, newest first: (ts, action, entity, detail).
-    pub fn journal_recent(
-        &self,
-        limit: i64,
-    ) -> Result<Vec<(String, String, Option<String>, Option<String>)>> {
+    pub fn journal_recent(&self, limit: i64) -> Result<Vec<JournalEntry>> {
         let mut stmt = self
             .conn
             .prepare("SELECT ts, action, entity, detail FROM journal ORDER BY id DESC LIMIT ?1")?;
