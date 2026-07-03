@@ -341,6 +341,30 @@ impl State {
         Ok(())
     }
 
+    /// Hard-delete a task record (compensation path of provisioning ONLY — user-facing
+    /// removal is archive). Cascades task_repos via FK.
+    pub fn delete_task(&mut self, task_id: i64) -> Result<()> {
+        let n = self
+            .conn
+            .execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("task #{task_id}")));
+        }
+        Ok(())
+    }
+
+    /// Absolute path of a repo by id.
+    pub fn repo_path(&self, repo_id: i64) -> Result<String> {
+        self.conn
+            .query_row(
+                "SELECT path FROM repos WHERE id = ?1",
+                params![repo_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| CoreError::NotFound(format!("repo #{repo_id}")))
+    }
+
     pub fn restore_task(&mut self, task_id: i64) -> Result<()> {
         let t = self.task_by_id(task_id)?;
         if t.archived_at.is_none() {
