@@ -5,7 +5,14 @@
 //! - Agents write code only — git is denied to them; all git ops are explicit human actions.
 //! - Single writer for state; git operations serialized per repository; no races by construction.
 
-/// Placeholder for the first domain type; replaced by the real domain model in Phase 1.
+pub mod domain;
+pub mod error;
+pub mod state;
+
+pub use domain::{slugify, Group, Project, Repo, Task, TaskRepo, TaskStatus};
+pub use error::{CoreError, Result};
+pub use state::State;
+
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
