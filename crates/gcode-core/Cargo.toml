@@ -1,0 +1,7 @@
+[package]
+name = "gcode-core"
+description = "Core engine of gcode — the agentic IDE: projects, multi-repo tasks, threads, groups, ops"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
