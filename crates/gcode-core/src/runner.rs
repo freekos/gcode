@@ -92,11 +92,7 @@ pub fn run_thread(
                     });
                 }
                 AgentEvent::TextDelta(t) => text.push_str(t),
-                AgentEvent::WholeText(t) => {
-                    if text.is_empty() {
-                        text.push_str(t);
-                    }
-                }
+                AgentEvent::WholeText(t) if text.is_empty() => text.push_str(t),
                 AgentEvent::Done { ok: o, error: e } => {
                     ok = *o;
                     error = e.clone();
