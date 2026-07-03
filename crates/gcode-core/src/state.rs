@@ -3,13 +3,13 @@
 //! Concurrency contract (see DESIGN.md §3): this struct is NOT shared across threads —
 //! it is owned by the single state actor. Everything here is synchronous by design.
 
-use crate::domain::{Group, Project, Repo, Task, TaskRepo, TaskStatus};
+use crate::domain::{Group, Project, Repo, Task, TaskRepo, TaskStatus, Thread};
 use crate::error::{CoreError, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
 /// Current schema version. Bump together with a new `migrate_to_*` step.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// One journal line: (ts, action, entity, detail).
 pub type JournalEntry = (String, String, Option<String>, Option<String>);
@@ -91,6 +91,27 @@ impl State {
                     action TEXT NOT NULL,
                     entity TEXT,
                     detail TEXT
+                );
+                "#,
+            )?;
+            tx.pragma_update(None, "user_version", 1)?;
+            tx.commit()?;
+        }
+        let v: i64 = self
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if v < 2 {
+            let tx = self.conn.transaction()?;
+            tx.execute_batch(
+                r#"
+                CREATE TABLE threads (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    engine TEXT NOT NULL,
+                    session_id TEXT,
+                    title TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    last_activity TEXT NOT NULL DEFAULT (datetime('now'))
                 );
                 "#,
             )?;
@@ -444,6 +465,76 @@ impl State {
         Ok(())
     }
 
+    // ---- threads ----
+
+    /// Register a new thread of a task (metadata only — the transcript lives with the engine).
+    pub fn add_thread(&mut self, task_id: i64, engine: &str, title: &str) -> Result<Thread> {
+        // FK is enforced, but give a clean error instead of a bare constraint failure.
+        let _ = self.task_by_id(task_id)?;
+        self.conn.execute(
+            "INSERT INTO threads (task_id, engine, title) VALUES (?1, ?2, ?3)",
+            params![task_id, engine, title],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.thread_by_id(id)
+    }
+
+    pub fn thread_by_id(&self, id: i64) -> Result<Thread> {
+        self.conn
+            .query_row(
+                "SELECT id, task_id, engine, session_id, title, created_at, last_activity
+                 FROM threads WHERE id = ?1",
+                params![id],
+                Self::row_to_thread,
+            )
+            .optional()?
+            .ok_or_else(|| CoreError::NotFound(format!("thread #{id}")))
+    }
+
+    fn row_to_thread(r: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
+        Ok(Thread {
+            id: r.get(0)?,
+            task_id: r.get(1)?,
+            engine: r.get(2)?,
+            session_id: r.get(3)?,
+            title: r.get(4)?,
+            created_at: r.get(5)?,
+            last_activity: r.get(6)?,
+        })
+    }
+
+    /// Threads of a task, most recently active first.
+    pub fn list_threads(&self, task_id: i64) -> Result<Vec<Thread>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, task_id, engine, session_id, title, created_at, last_activity
+             FROM threads WHERE task_id = ?1 ORDER BY last_activity DESC",
+        )?;
+        let rows = stmt
+            .query_map(params![task_id], Self::row_to_thread)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Record the engine-assigned session id (first run of a thread) + touch activity.
+    pub fn set_thread_session(&mut self, thread_id: i64, session_id: &str) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE threads SET session_id = ?2, last_activity = datetime('now') WHERE id = ?1",
+            params![thread_id, session_id],
+        )?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("thread #{thread_id}")));
+        }
+        Ok(())
+    }
+
+    pub fn touch_thread(&mut self, thread_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE threads SET last_activity = datetime('now') WHERE id = ?1",
+            params![thread_id],
+        )?;
+        Ok(())
+    }
+
     // ---- journal ----
 
     pub fn journal_append(
@@ -592,6 +683,49 @@ mod tests {
         // unknown group
         let err = s.assign_group(t.id, Some(9999)).unwrap_err();
         assert!(matches!(err, CoreError::NotFound(_)));
+    }
+
+    #[test]
+    fn threads_metadata_lifecycle() {
+        let mut s = st();
+        let p = proj(&mut s);
+        let repos = s.project_repos(p.id).unwrap();
+        let wt = vec![(repos[0].id, "/x".to_string())];
+        let t = s.add_task(p.id, "A", "a", "a", &wt).unwrap();
+
+        let th = s.add_thread(t.id, "claude", "первый разговор").unwrap();
+        assert_eq!(th.engine, "claude");
+        assert!(
+            th.session_id.is_none(),
+            "session id arrives from the engine later"
+        );
+
+        s.set_thread_session(th.id, "sess-123").unwrap();
+        let th2 = s.thread_by_id(th.id).unwrap();
+        assert_eq!(th2.session_id.as_deref(), Some("sess-123"));
+
+        let list = s.list_threads(t.id).unwrap();
+        assert_eq!(list.len(), 1);
+
+        // unknown task/thread fail loudly
+        assert!(matches!(
+            s.add_thread(9999, "claude", "x").unwrap_err(),
+            CoreError::NotFound(_)
+        ));
+        assert!(matches!(
+            s.set_thread_session(9999, "s").unwrap_err(),
+            CoreError::NotFound(_)
+        ));
+    }
+
+    #[test]
+    fn schema_migrates_to_v2() {
+        let s = st();
+        let v: i64 = s
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 2);
     }
 
     #[test]

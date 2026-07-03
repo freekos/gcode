@@ -8,6 +8,7 @@
 pub mod actor;
 pub mod archive;
 pub mod domain;
+pub mod engine;
 pub mod error;
 pub mod git;
 pub mod provision;
@@ -16,7 +17,7 @@ pub mod scan;
 pub mod state;
 
 pub use actor::StateHandle;
-pub use domain::{slugify, Group, Project, Repo, Task, TaskRepo, TaskStatus};
+pub use domain::{slugify, Group, Project, Repo, Task, TaskRepo, TaskStatus, Thread};
 pub use error::{CoreError, Result};
 pub use queues::KeyedQueues;
 pub use state::State;

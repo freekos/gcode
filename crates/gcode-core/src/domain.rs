@@ -85,6 +85,19 @@ pub struct Group {
     pub branch: Option<String>,
 }
 
+/// One agent conversation inside a task. The transcript itself is stored by the
+/// engine (cwd-scoped); we keep metadata + the session id needed to resume.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Thread {
+    pub id: i64,
+    pub task_id: i64,
+    pub engine: String,
+    pub session_id: Option<String>,
+    pub title: String,
+    pub created_at: String,
+    pub last_activity: String,
+}
+
 /// Per-repo worktree of a task.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRepo {
