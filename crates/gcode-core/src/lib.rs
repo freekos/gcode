@@ -8,7 +8,9 @@
 pub mod actor;
 pub mod domain;
 pub mod error;
+pub mod git;
 pub mod queues;
+pub mod scan;
 pub mod state;
 
 pub use actor::StateHandle;
