@@ -42,9 +42,12 @@
       if (!el) return;
       clearTimeout(timer);
       timer = window.setTimeout(() => {
+        const r = el.getBoundingClientRect();
+        // the trigger may have vanished (hover-revealed buttons) — a zero rect
+        // would pin the tip to the window corner, over the traffic lights
+        if (!el.isConnected || (r.width === 0 && r.height === 0)) return;
         tip.textContent = el.dataset.tip ?? "";
         tip.classList.add("show");
-        const r = el.getBoundingClientRect();
         const tw = tip.offsetWidth;
         const x = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), window.innerWidth - tw - 8);
         let y = r.top - tip.offsetHeight - 8;
