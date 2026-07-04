@@ -39,6 +39,8 @@
 
 <style>
   dialog {
+    /* Tailwind preflight zeroes margins — restore the UA centering of <dialog> */
+    margin: auto;
     background: var(--surface-3);
     color: var(--text-primary);
     border: 1px solid var(--border-strong);
