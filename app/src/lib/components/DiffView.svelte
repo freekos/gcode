@@ -195,17 +195,20 @@
   .st-added { color: var(--diff-add); font-size: 11px; }
   .st-deleted { color: var(--diff-del); font-size: 11px; }
   .st-renamed { color: var(--text-muted); font-size: 11px; }
-  .hunks { display: flex; flex-direction: column; }
-  .hh { font: 11px var(--font-mono); color: var(--text-muted); background: var(--surface-0); padding: 3px 10px; }
+  /* long code lines scroll horizontally inside the file block (no "..." cuts) */
+  .hunks { display: flex; flex-direction: column; overflow-x: auto; }
+  .hh { font: 11px var(--font-mono); color: var(--text-muted); background: var(--surface-0); padding: 3px 10px; position: sticky; left: 0; }
   .dl {
     display: grid;
-    grid-template-columns: 20px 40px 40px 14px 1fr;
+    grid-template-columns: 20px 40px 40px 14px max-content;
     gap: 6px;
     padding: 0 10px 0 4px;
     font: 12px var(--font-mono);
     line-height: 1.7;
     color: var(--text-secondary);
     white-space: pre;
+    width: max-content;
+    min-width: 100%;
   }
   .dl .no { color: var(--text-disabled); text-align: right; user-select: none; }
   .dl .sign { color: var(--text-muted); user-select: none; }
@@ -236,7 +239,7 @@
     box-shadow: inset 2px 0 0 var(--accent);
   }
   .dl.sel .plus { visibility: visible; }
-  .txt { overflow: hidden; text-overflow: ellipsis; }
+  .txt { padding-right: 14px; }
   .cbox { padding: 10px; background: var(--surface-2); }
   .crange { color: var(--text-muted); margin-bottom: 6px; }
   .cbox textarea {
