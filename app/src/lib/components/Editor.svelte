@@ -12,10 +12,12 @@
     content,
     path,
     onsave,
+    onquote,
   }: {
     content: string;
     path: string; // used for language detection
     onsave: (text: string) => void;
+    onquote?: (from: number, to: number, code: string) => void;
   } = $props();
 
   let host: HTMLElement;
@@ -82,6 +84,18 @@
                   return true;
                 },
               },
+              {
+                // Cursor-style cmd-L: quote the selection into the agent composer
+                key: "Mod-l",
+                run: (v: EditorView) => {
+                  const sel = v.state.selection.main;
+                  if (sel.empty || !onquote) return false;
+                  const from = v.state.doc.lineAt(sel.from).number;
+                  const to = v.state.doc.lineAt(sel.to).number;
+                  onquote(from, to, v.state.sliceDoc(sel.from, sel.to));
+                  return true;
+                },
+              },
               indentWithTab,
               ...defaultKeymap,
               ...historyKeymap,
@@ -118,7 +132,7 @@
     <span class="mono">{path}</span>
     {#if dirty}<span class="dot" data-tip="Есть несохранённые правки · ⌘S" aria-label="Не сохранено"></span>{/if}
     <span class="grow"></span>
-    <span class="hint">⌘S — сохранить</span>
+    <span class="hint">⌘S — сохранить{#if onquote} · ⌘L — в промпт{/if}</span>
   </div>
   <div class="ed-host" bind:this={host}></div>
 </div>

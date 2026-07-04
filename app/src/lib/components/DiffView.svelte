@@ -24,11 +24,13 @@
     onsend,
     onselchange,
     onopen,
+    onquote,
   }: {
     groups: DiffGroup[];
     onsend: (comments: PendingComment[]) => void;
     onselchange?: (selecting: boolean) => void;
     onopen?: (repo: string, path: string) => void;
+    onquote?: (repo: string, file: string, from: number, to: number, code: string) => void;
   } = $props();
 
   let collapsedFiles: Record<string, boolean> = $state({});
@@ -111,6 +113,12 @@
 <svelte:window
   onkeydown={(e) => {
     if (e.key === "Escape" && selFile) clearSel();
+    // cmd-L: quote the selected lines into the agent composer (Cursor-style)
+    if (e.metaKey && e.key.toLowerCase() === "l" && selRepo && selFile && selFrom !== null && selTo !== null) {
+      e.preventDefault();
+      onquote?.(selRepo, selFile, selFrom, selTo, selectedCode());
+      clearSel();
+    }
   }}
 />
 
@@ -181,6 +189,16 @@
               ></textarea>
               <div class="cbar">
                 <Button variant="ghost" onclick={clearSel}>Отмена</Button>
+                {#if onquote}
+                  <Button
+                    variant="ghost"
+                    onclick={() => {
+                      if (selRepo && selFile && selFrom !== null && selTo !== null) {
+                        onquote?.(selRepo, selFile, selFrom, selTo, selectedCode());
+                        clearSel();
+                      }
+                    }}>В промпт ⌘L</Button>
+                {/if}
                 <Button variant="primary" onclick={addComment}>Добавить в пачку ⏎</Button>
               </div>
             </div>

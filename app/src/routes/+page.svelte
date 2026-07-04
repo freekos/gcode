@@ -151,6 +151,13 @@
     editorOpen = true;
   }
 
+  // cmd-L: drop a code quote into the agent composer (points the agent at code)
+  function quoteToComposer(loc: string, code: string) {
+    const fence = "```";
+    msg = `${msg ? msg + "\n\n" : ""}${loc}\n${fence}\n${code}\n${fence}\n`;
+    document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+  }
+
   function saveEditor(text: string) {
     if (editorScope === "project") {
       if (filesProject) projectFileWrite(filesProject.id, editorPath, text);
@@ -908,7 +915,18 @@
     <aside class="ctx ctx-diff">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       {#key `${editorRepo}/${editorPath}`}
-        <Editor content={editorContent} path={editorPath} onsave={saveEditor} />
+        <Editor
+          content={editorContent}
+          path={editorPath}
+          onsave={saveEditor}
+          onquote={selected
+            ? (from, to, code) =>
+                quoteToComposer(
+                  `${editorScope === "task" ? editorRepo + "/" : ""}${editorPath}:${from}${to !== from ? `–${to}` : ""}`,
+                  code,
+                )
+            : undefined}
+        />
       {/key}
     </aside>
   {:else if selected && diffOpen}
@@ -926,7 +944,13 @@
           {/if}
         </div>
       </div>
-      <DiffView groups={diffGroups} onsend={sendReview} onselchange={(b) => (diffSelecting = b)} onopen={openEditor} />
+      <DiffView
+        groups={diffGroups}
+        onsend={sendReview}
+        onselchange={(b) => (diffSelecting = b)}
+        onopen={openEditor}
+        onquote={(repo, file, from, to, code) => quoteToComposer(`${repo}/${file}:${from}${to !== from ? `–${to}` : ""}`, code)}
+      />
     </aside>
   {:else if selected}
     <aside class="ctx">
