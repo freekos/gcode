@@ -139,7 +139,13 @@
           </div>
           {#if composerAt === f.path && selFrom !== null}
             <div class="cbox">
-              <div class="crange mono">{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · shift+клик — диапазон</div>
+              <div class="crange mono">{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · shift+клик — диапазон · Esc — отмена</div>
+              <div class="cpreview mono">
+                {#each selectedCode().split("\n").slice(0, 4) as pl, pi (pi)}
+                  <div class:p-add={pl.startsWith("+")} class:p-del={pl.startsWith("-")}>{pl}</div>
+                {/each}
+                {#if selectedCode().split("\n").length > 4}<div class="p-more">… ещё {selectedCode().split("\n").length - 4} строк</div>{/if}
+              </div>
               <textarea
                 use:autogrow
                 bind:value={commentText}
@@ -242,6 +248,20 @@
   .txt { padding-right: 14px; }
   .cbox { padding: 10px; background: var(--surface-2); }
   .crange { color: var(--text-muted); margin-bottom: 6px; }
+  .cpreview {
+    background: var(--surface-0);
+    border-radius: var(--r-md);
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .cpreview .p-add { color: var(--diff-add); }
+  .cpreview .p-del { color: var(--diff-del); }
+  .cpreview .p-more { color: var(--text-disabled); font-style: italic; }
   .cbox textarea {
     width: 100%; border: 0; border-radius: var(--r-md);
     background: var(--surface-1); color: var(--text-primary);
