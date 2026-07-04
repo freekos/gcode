@@ -1316,7 +1316,16 @@
   .composer .c-inner { max-width: 860px; margin: 0 auto; border-radius: 16px; }
   .queue-note { font-size: 11.5px; color: var(--status-running); }
   .mono-s { font-family: var(--font-mono); font-size: 11px; }
-  .ctx { background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; overflow-y: auto; }
+  .ctx { position: relative; background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; overflow-y: auto; }
+  .ctx-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 7px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 40;
+  }
   :global(:root.native) .ctx { background: color-mix(in oklab, var(--surface-1) 70%, transparent); }
   .repo { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px; }
   .rn { font-family: var(--font-mono); font-size: 11.5px; }
