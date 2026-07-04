@@ -12,8 +12,10 @@
     threadSend,
     onThreadEvent,
     onTasksChanged,
+    onTaskRenamed,
     isDemo,
     taskContext,
+    threadHistory,
     projectAdd,
     pickFolder,
     revealProject,
@@ -30,7 +32,7 @@
   import DiffStat from "$lib/components/DiffStat.svelte";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error"; text: string };
-  type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[] };
+  type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[]; waiting?: boolean };
 
   type ProjectNode = { project: Project; tasks: Task[] };
   let tree: ProjectNode[] = $state([]);
@@ -48,6 +50,8 @@
 
   let creating = $state(false);
   let pendingPrompt: string | null = $state(null);
+  // tasks whose AI name is still cooking -> skeleton shimmer on the title
+  let naming = $state(new Set<number>());
 
   // per-task thread view state (history persistence comes later — engine owns transcripts)
   let threads: Record<number, ThreadState> = $state({});
@@ -160,6 +164,7 @@
     const t = th(taskId);
     t.items.push({ kind: "user", text: prompt });
     t.running = true;
+    t.waiting = true; // skeleton "agent is connecting" until the first event
     scrollDown();
     threadSend(taskId, prompt);
   }
@@ -174,6 +179,7 @@
       if (e.resets_at) limit = { kind: e.text, resetsAt: e.resets_at };
       return;
     }
+    t.waiting = false;
     if (e.kind === "delta") {
       const last = t.items[t.items.length - 1];
       if (last?.kind === "agent") last.text += e.text;
@@ -216,21 +222,17 @@
     reload();
     let un: (() => void) | undefined;
     let unThread: (() => void) | undefined;
-    onTasksChanged(async (payload) => {
+    onTasksChanged(async () => {
       creating = false;
       await reload();
-      // the creation prompt IS the first agent message (review comment #2)
-      if (pendingPrompt && payload?.ok && payload?.slug) {
-        const node = tree.find((n) => n.tasks.some((t) => t.slug === payload.slug));
-        const t = node?.tasks.find((t) => t.slug === payload.slug);
-        if (t && node) {
-          pick(t, node.project);
-          fire(t.id, pendingPrompt);
-        }
-        pendingPrompt = null;
-      }
     }).then((u) => (un = u));
     onThreadEvent(onEvent).then((u) => (unThread = u));
+    let unRen: (() => void) | undefined;
+    onTaskRenamed(({ id }) => {
+      naming.delete(id);
+      naming = new Set(naming);
+      reload();
+    }).then((u) => (unRen = u));
 
     const onkey = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === "n") {
@@ -253,6 +255,7 @@
       window.removeEventListener("keydown", onkey);
       un?.();
       unThread?.();
+      unRen?.();
     };
   });
 
@@ -272,11 +275,20 @@
 
   async function submitHub() {
     if (!project || !hubPrompt.trim()) return;
-    creating = true;
-    pendingPrompt = hubPrompt.trim();
-    await taskCreate(project.id, hubPrompt.trim());
+    const text = hubPrompt.trim();
     hubPrompt = "";
     localStorage.removeItem("gcode.draft.newtask");
+    const p = project;
+    const t = await taskCreate(p.id, text); // instant (optimistic naming)
+    naming.add(t.id);
+    naming = new Set(naming);
+    await reload();
+    const node = tree.find((n) => n.project.id === p.id);
+    const created = node?.tasks.find((x) => x.id === t.id);
+    if (created && node) {
+      pick(created, node.project);
+      fire(created.id, text); // prompt = first agent message, right away
+    }
   }
   function greet(): string {
     const h = new Date().getHours();
@@ -294,6 +306,16 @@
   function pick(t: Task, p: Project) {
     selected = t;
     projectId = p.id;
+    // restore the conversation from the engine transcript on first open
+    const st = th(t.id);
+    if (st.items.length === 0 && !st.running) {
+      threadHistory(t.id).then((items) => {
+        if (st.items.length === 0 && items.length) {
+          st.items = items.map((i) => ({ kind: i.kind, text: i.text }));
+          if (selected?.id === t.id) scrollDown();
+        }
+      });
+    }
   }
 
   async function addProject() {
@@ -503,9 +525,14 @@
       </div>
     {:else if selected}
       <div class="thread-head">
-        <b>{selected.title}</b>
+        {#if naming.has(selected.id)}
+          <b>{selected.title}</b>
+          <span class="skel skel-pill" data-tip="ИИ придумывает имя и ветку" aria-label="Имя генерится"></span>
+        {:else}
+          <b>{selected.title}</b>
+          <span class="branch">{selected.branch}</span>
+        {/if}
         <Badge status={cur.running ? "running" : selected.status} />
-        <span class="branch">{selected.branch}</span>
       </div>
       <div class="thread-box" bind:this={threadBox}>
         {#if cur.items.length === 0}
@@ -514,6 +541,13 @@
             <p class="branch">.gcode/tasks/{selected.slug}/</p>
           </div>
         {:else}
+          {#if cur.waiting}
+            <div class="agent-wait">
+              <span class="skel skel-line" style="width:56%"></span>
+              <span class="skel skel-line" style="width:38%"></span>
+              <span class="mut" style="font-size:11.5px">◐ агент подключается…</span>
+            </div>
+          {/if}
           {#each blocks as b, i (i)}
             {#if b.kind === "tools"}
               <details class="tools">
@@ -804,6 +838,19 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
+  .skel {
+    display: inline-block;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+    background-size: 200% 100%;
+    animation: gc-shimmer 1.4s ease-in-out infinite;
+  }
+  .skel-pill { width: 120px; height: 14px; }
+  .skel-line { height: 12px; margin: 3px 0; }
+  .agent-wait { display: flex; flex-direction: column; gap: 2px; order: 999; }
+  @keyframes gc-shimmer {
+    to { background-position: -200% 0; }
+  }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
   .drag-strip {
     height: 44px;
@@ -1001,21 +1048,11 @@
     gap: 8px;
     overflow-y: auto;
   }
-  /* native window: liquid glass sidebar — vibrancy below + a soft white pour
-     that is brighter at the top, plus a gradient hairline on the right edge */
+  /* native window: the sidebar is FULLY transparent — pure window glass,
+     no own background/borders (Gaziz's call: don't fight the vibrancy) */
   :global(:root.native) aside {
-    background: linear-gradient(180deg, oklch(100% 0 0 / 0.05), oklch(100% 0 0 / 0.012) 40%, oklch(100% 0 0 / 0.02));
+    background: transparent;
     border-right: 0;
-  }
-  :global(:root.native) aside::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 1px;
-    height: 100%;
-    background: linear-gradient(180deg, var(--glass-edge-top), var(--glass-edge-bottom) 60%, transparent);
-    pointer-events: none;
   }
   :global(:root.native) main { background: transparent; }
   .sb-resize {

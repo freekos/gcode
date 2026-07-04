@@ -82,20 +82,32 @@ export async function tasksList(projectId: number, includeArchived = false): Pro
   return invoke<Task[]>("tasks_list", { projectId, includeArchived });
 }
 
-export async function taskCreate(projectId: number, prompt: string): Promise<void> {
+export async function taskCreate(projectId: number, prompt: string): Promise<Task> {
   if (!inTauri) {
     const slug = prompt.toLowerCase().slice(0, 24).replace(/[^a-zа-яё0-9]+/gi, "-");
-    demoTaskSets[projectId] = [
-      { id: demoId++, title: prompt, slug, branch: slug, status: "new", archived: false, created_at: new Date().toISOString().slice(0, 19).replace("T", " ") },
-      ...(demoTaskSets[projectId] ?? []),
-    ];
-    setTimeout(
-      () => window.dispatchEvent(new CustomEvent("demo-tasks-changed", { detail: { ok: true, slug } })),
-      400,
-    );
-    return;
+    const t: Task = { id: demoId++, title: prompt, slug, branch: slug, status: "new", archived: false, created_at: new Date().toISOString().slice(0, 19).replace("T", " ") };
+    demoTaskSets[projectId] = [t, ...(demoTaskSets[projectId] ?? [])];
+    // demo: pretend the AI renamed it a bit later
+    setTimeout(() => {
+      t.title = "Красивое имя от ИИ";
+      t.branch = "ai-branch-name";
+      window.dispatchEvent(new CustomEvent("demo-task-renamed", { detail: { id: t.id, ai: true } }));
+      window.dispatchEvent(new CustomEvent("demo-tasks-changed", { detail: { ok: true } }));
+    }, 2500);
+    return t;
   }
-  return invoke<void>("task_create", { projectId, prompt });
+  return invoke<Task>("task_create", { projectId, prompt });
+}
+
+export async function onTaskRenamed(cb: (e: { id: number; ai: boolean }) => void): Promise<() => void> {
+  if (!inTauri) {
+    const h = (e: Event) => cb((e as CustomEvent<{ id: number; ai: boolean }>).detail);
+    window.addEventListener("demo-task-renamed", h);
+    return () => window.removeEventListener("demo-task-renamed", h);
+  }
+  const { listen } = await import("@tauri-apps/api/event");
+  const un = await listen<{ id: number; ai: boolean }>("task-renamed", (ev) => cb(ev.payload));
+  return un;
 }
 
 export interface TasksChangedPayload {
@@ -255,6 +267,14 @@ export async function exportLogs(): Promise<string | null> {
   if (!path) return null;
   await invoke<number>("logs_export", { path });
   return path;
+}
+
+export interface HistoryItem { kind: "user" | "agent" | "tool"; text: string; }
+
+/** History of the task's latest thread (from Claude's own transcript). */
+export async function threadHistory(taskId: number): Promise<HistoryItem[]> {
+  if (!inTauri) return [];
+  return invoke<HistoryItem[]>("thread_history", { taskId });
 }
 
 export const isDemo = !inTauri;

@@ -253,6 +253,40 @@ pub fn provision_task_named(
     })
 }
 
+/// Rename the task branch in every worktree (safe before the first push) and in
+/// state — the optimistic transliterated branch becomes the AI convention name.
+pub fn rename_task_branch(
+    handle: &StateHandle,
+    queues: &KeyedQueues,
+    task_id: i64,
+    new_branch: &str,
+) -> Result<()> {
+    let task = handle.call(move |st| st.task_by_id(task_id))?;
+    if task.branch == new_branch {
+        return Ok(());
+    }
+    let trs = handle.call(move |st| st.task_repos(task_id))?;
+    for tr in &trs {
+        let rid = tr.repo_id;
+        let repo_path = handle.call(move |st| st.repo_path(rid))?;
+        let wt = Path::new(&tr.worktree_path).to_path_buf();
+        let old = task.branch.clone();
+        let newb = new_branch.to_string();
+        queues.with(&repo_path, || {
+            if wt.is_dir() {
+                let _ = git::run_git(&wt, &["branch", "-m", &old, &newb]);
+            }
+        });
+    }
+    let nb = new_branch.to_string();
+    handle.call(move |st| {
+        st.set_task_branch(task_id, &nb)?;
+        let _ = st.journal_append("task.branch_renamed", Some(&nb), None);
+        Ok::<_, crate::error::CoreError>(())
+    })?;
+    Ok(())
+}
+
 /// Remove the task's worktrees from disk (used by archive; state stays intact).
 pub fn remove_worktrees(handle: &StateHandle, queues: &KeyedQueues, task_id: i64) -> Result<()> {
     let trs = handle.call(move |st| st.task_repos(task_id))?;

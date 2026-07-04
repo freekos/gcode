@@ -329,6 +329,19 @@ impl State {
         Ok(rows)
     }
 
+    /// Update the branch name of a task (optimistic naming: transliterated branch
+    /// is created instantly, the AI convention name lands seconds later).
+    pub fn set_task_branch(&mut self, task_id: i64, branch: &str) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE tasks SET branch = ?2 WHERE id = ?1",
+            params![task_id, branch],
+        )?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("task #{task_id}")));
+        }
+        Ok(())
+    }
+
     /// Rename the human-facing title (the AI names tasks; slug/branch stay stable).
     pub fn set_task_title(&mut self, task_id: i64, title: &str) -> Result<()> {
         let n = self.conn.execute(

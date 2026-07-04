@@ -17,7 +17,9 @@ pub mod provision;
 pub mod queues;
 pub mod runner;
 pub mod scan;
+pub mod session;
 pub mod state;
+pub mod transcript;
 
 pub use actor::StateHandle;
 pub use domain::{slugify, Group, Project, Repo, Task, TaskRepo, TaskStatus, Thread};

@@ -237,3 +237,26 @@ fn task_context_reports_touched_repos_and_progress() {
     assert_eq!(ctx.progress.len(), 2);
     assert!(ctx.progress[0].done);
 }
+
+#[test]
+fn optimistic_branch_rename_updates_worktrees_and_state() {
+    use gcode_core::provision::rename_task_branch;
+    let (h, q, _tmp) = setup();
+    let res = provision_task(&h, &q, "azi", "временное имя", &[]).unwrap();
+    assert_eq!(
+        res.task.branch, "vremennoe-imya",
+        "transliterated instantly"
+    );
+
+    rename_task_branch(&h, &q, res.task.id, "fix-temp-name").unwrap();
+    // branch renamed in every worktree
+    for (_, wt) in &res.worktrees {
+        assert_eq!(git_out(wt, &["branch", "--show-current"]), "fix-temp-name");
+    }
+    // and in state
+    let t = h.call({
+        let id = res.task.id;
+        move |st| st.task_by_id(id).unwrap()
+    });
+    assert_eq!(t.branch, "fix-temp-name");
+}

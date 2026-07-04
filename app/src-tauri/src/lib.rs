@@ -2,9 +2,11 @@
 //! All state access goes through the core's single-writer actor — the UI never
 //! touches SQLite or git directly.
 
-use gcode_core::engine::{AgentEvent, ClaudeEngine};
-use gcode_core::runner::run_thread;
+use gcode_core::engine::AgentEvent;
+use gcode_core::session::LiveSession;
 use gcode_core::{namer, provision, scan, KeyedQueues, State, StateHandle, TaskStatus};
+use std::collections::HashMap;
+use std::sync::Mutex;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,6 +15,8 @@ use tauri::{AppHandle, Emitter, Manager, State as TState};
 struct App {
     handle: StateHandle,
     queues: Arc<KeyedQueues>,
+    /// live agent session per task (pattern B: one persistent process, many turns)
+    sessions: Arc<Mutex<HashMap<i64, LiveSession>>>,
 }
 
 #[derive(Serialize, Clone)]
@@ -119,15 +123,17 @@ fn tasks_list(
         .map_err(err_s)
 }
 
-/// Create a task from a prompt (the human never names tasks — ui-inventory §6).
-/// Provisioning runs in a background thread; "tasks-changed" fires when done.
+/// OPTIMISTIC task creation (review decision): provision INSTANTLY with
+/// transliterated names (sub-second), return the task right away; the AI then
+/// names the title + git-convention branch in the background and "task-renamed"
+/// fires when it lands. The UI shows skeletons meanwhile.
 #[tauri::command]
 fn task_create(
     app_handle: AppHandle,
     app: TState<'_, App>,
     project_id: i64,
     prompt: String,
-) -> Result<(), String> {
+) -> Result<TaskDto, String> {
     let project = app
         .handle
         .call(move |st| -> gcode_core::Result<_> {
@@ -139,20 +145,41 @@ fn task_create(
         })
         .map_err(err_s)?;
 
+    // instant path: transliterated names, parallel worktrees (fast)
+    let names = namer::fallback(&prompt);
+    let res = provision::provision_task_named(&app.handle, &app.queues, &project.name, &names, &[])
+        .map_err(err_s)?;
+    let task = res.task;
+    let dto = TaskDto {
+        id: task.id,
+        title: task.title.clone(),
+        slug: task.slug.clone(),
+        branch: task.branch.clone(),
+        status: task.status.as_str().to_string(),
+        archived: false,
+        created_at: task.created_at.clone(),
+    };
+
+    // background: AI names it properly, then rename branch + title
     let handle = app.handle.clone();
     let queues = app.queues.clone();
+    let task_id = task.id;
     std::thread::spawn(move || {
-        // Gaziz's rule: humans write prompts; the AI names the task and the branch
-        // (git convention, english kebab-case). Transliteration is the fallback.
-        let names = namer::suggest_names("claude", &prompt, std::time::Duration::from_secs(15));
-        let res = provision::provision_task_named(&handle, &queues, &project.name, &names, &[]);
-        let payload = match &res {
-            Ok(r) => serde_json::json!({ "ok": true, "slug": r.task.slug, "ai_named": names.ai }),
-            Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }),
-        };
-        let _ = app_handle.emit("tasks-changed", payload);
+        let ai = namer::suggest_names("claude", &prompt, std::time::Duration::from_secs(20));
+        if ai.ai {
+            let title = ai.title.clone();
+            handle.call(move |st| {
+                let _ = st.set_task_title(task_id, &title);
+            });
+            let _ = provision::rename_task_branch(&handle, &queues, task_id, &ai.branch);
+        }
+        let _ = app_handle.emit(
+            "task-renamed",
+            serde_json::json!({ "id": task_id, "ai": ai.ai }),
+        );
+        let _ = app_handle.emit("tasks-changed", serde_json::json!({ "ok": true }));
     });
-    Ok(())
+    Ok(dto)
 }
 
 #[derive(Serialize, Clone)]
@@ -164,9 +191,9 @@ struct ThreadEvent {
     resets_at: Option<i64>,
 }
 
-/// Send a message to the task's agent (new thread or continue the latest one).
-/// Streams engine events to the window as "thread-event"; task status flows
-/// through the core runner (running -> review) and "tasks-changed" fires after.
+/// Send a message into the task's LIVE agent session (pattern B). The first
+/// send spawns a persistent claude process (resuming the stored engine session);
+/// later sends reuse it — no cold starts. Events stream as "thread-event".
 #[tauri::command]
 fn thread_send(
     app_handle: AppHandle,
@@ -174,24 +201,50 @@ fn thread_send(
     task_id: i64,
     prompt: String,
 ) -> Result<(), String> {
-    let latest = app
-        .handle
-        .call(move |st| st.list_threads(task_id))
-        .map_err(err_s)?
-        .into_iter()
-        .next();
-    let handle = app.handle.clone();
-    std::thread::spawn(move || {
-        let eng = ClaudeEngine::default();
+    // one running agent per task (atomic via the actor)
+    app.handle
+        .call(move |st| st.try_start_agent(task_id))
+        .map_err(err_s)?;
+
+    let mut sessions = app.sessions.lock().unwrap();
+    let need_spawn = match sessions.get_mut(&task_id) {
+        Some(s) => !s.alive(),
+        None => true,
+    };
+    if need_spawn {
+        let thread = app
+            .handle
+            .call(move |st| st.list_threads(task_id))
+            .map_err(err_s)?
+            .into_iter()
+            .next();
+        let thread = match thread {
+            Some(t) => t,
+            None => app
+                .handle
+                .call({
+                    let title: String = prompt.chars().take(48).collect();
+                    move |st| st.add_thread(task_id, "claude", &title)
+                })
+                .map_err(err_s)?,
+        };
+        let root = gcode_core::runner::task_root(&app.handle, task_id).map_err(err_s)?;
+        let handle = app.handle.clone();
         let ah = app_handle.clone();
-        let res = run_thread(
-            &handle,
-            &eng,
-            task_id,
-            latest.map(|t| t.id),
-            &prompt,
-            &mut |ev| {
-                let payload = match ev {
+        let thread_id = thread.id;
+        let session = LiveSession::spawn(
+            "claude",
+            &root,
+            thread.session_id.as_deref(),
+            move |ev| {
+                let payload = match &ev {
+                    AgentEvent::Session(sid) => {
+                        let sid2 = sid.clone();
+                        handle.call(move |st| {
+                            let _ = st.set_thread_session(thread_id, &sid2);
+                        });
+                        return;
+                    }
                     AgentEvent::TextDelta(t) | AgentEvent::WholeText(t) => ThreadEvent {
                         task_id,
                         kind: "delta".into(),
@@ -199,14 +252,10 @@ fn thread_send(
                         ok: None,
                         resets_at: None,
                     },
-                    AgentEvent::ToolUse(n, detail) => ThreadEvent {
+                    AgentEvent::ToolUse(n, d) => ThreadEvent {
                         task_id,
                         kind: "tool".into(),
-                        text: if detail.is_empty() {
-                            n.clone()
-                        } else {
-                            format!("{n} · {detail}")
-                        },
+                        text: if d.is_empty() { n.clone() } else { format!("{n} · {d}") },
                         ok: None,
                         resets_at: None,
                     },
@@ -217,33 +266,57 @@ fn thread_send(
                         ok: None,
                         resets_at: Some(*resets_at),
                     },
-                    AgentEvent::Done { ok, error } => ThreadEvent {
-                        task_id,
-                        kind: "done".into(),
-                        text: error.clone().unwrap_or_default(),
-                        ok: Some(*ok),
-                    resets_at: None,
-                    },
-                    AgentEvent::Session(_) => return,
+                    AgentEvent::Done { ok, error } => {
+                        handle.call(move |st| {
+                            let _ = st.finish_agent(task_id);
+                            let _ = st.touch_thread(thread_id);
+                        });
+                        let _ = ah.emit("tasks-changed", serde_json::json!({ "ok": true }));
+                        ThreadEvent {
+                            task_id,
+                            kind: "done".into(),
+                            text: error.clone().unwrap_or_default(),
+                            ok: Some(*ok),
+                            resets_at: None,
+                        }
+                    }
                 };
                 let _ = ah.emit("thread-event", payload);
             },
-        );
-        if let Err(e) = res {
-            let _ = app_handle.emit(
-                "thread-event",
-                ThreadEvent {
-                    task_id,
-                    kind: "done".into(),
-                    text: e.to_string(),
-                    ok: Some(false),
-                    resets_at: None,
-                },
-            );
+        )
+        .map_err(err_s)?;
+        sessions.insert(task_id, session);
+    }
+    if let Some(sess) = sessions.get_mut(&task_id) {
+        if let Err(e) = sess.send(&prompt) {
+            sessions.remove(&task_id);
+            let _ = app.handle.call(move |st| st.finish_agent(task_id));
+            return Err(err_s(e));
         }
-        let _ = app_handle.emit("tasks-changed", serde_json::json!({ "ok": true }));
-    });
+    }
     Ok(())
+}
+
+/// History of the task's latest thread, read back from Claude's own transcript.
+#[tauri::command]
+fn thread_history(
+    app: TState<'_, App>,
+    task_id: i64,
+) -> Result<Vec<gcode_core::transcript::HistoryItem>, String> {
+    let thread = app
+        .handle
+        .call(move |st| st.list_threads(task_id))
+        .map_err(err_s)?
+        .into_iter()
+        .next();
+    let Some(thread) = thread else {
+        return Ok(vec![]);
+    };
+    let Some(sid) = thread.session_id else {
+        return Ok(vec![]);
+    };
+    let root = gcode_core::runner::task_root(&app.handle, task_id).map_err(err_s)?;
+    Ok(gcode_core::transcript::load_history(&root, &sid))
 }
 
 #[tauri::command]
@@ -288,6 +361,7 @@ pub fn run() {
     let app = App {
         handle: StateHandle::spawn(state),
         queues: Arc::new(KeyedQueues::new()),
+        sessions: Arc::new(Mutex::new(HashMap::new())),
     };
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -314,6 +388,7 @@ pub fn run() {
             tasks_list,
             task_create,
             thread_send,
+            thread_history,
             task_context,
             logs_export,
             task_set_status
