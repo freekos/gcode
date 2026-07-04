@@ -39,6 +39,7 @@ html,
 body {
   height: 100%;
   background: var(--surface-0);
+  overflow: hidden; /* no global scroll — every panel scrolls on its own */
 }
 
 /* Native (Tauri) window: macOS vibrancy shows through transparent regions —

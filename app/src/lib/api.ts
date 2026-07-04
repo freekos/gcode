@@ -185,4 +185,11 @@ export async function pickFolder(): Promise<string | null> {
   return typeof res === "string" ? res : null;
 }
 
+/** Reveal the project folder in Finder (native only). */
+export async function revealProject(path: string): Promise<void> {
+  if (!inTauri) return;
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealItemInDir(path);
+}
+
 export const isDemo = !inTauri;

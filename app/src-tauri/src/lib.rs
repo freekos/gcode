@@ -8,7 +8,7 @@ use gcode_core::{namer, provision, scan, KeyedQueues, State, StateHandle, TaskSt
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State as TState};
+use tauri::{AppHandle, Emitter, Manager, State as TState};
 
 struct App {
     handle: StateHandle,
@@ -274,7 +274,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            use tauri::Manager;
             // macOS: translucent sidebar material behind transparent regions
             #[cfg(target_os = "macos")]
             if let Some(w) = app.get_webview_window("main") {
@@ -284,11 +283,6 @@ pub fn run() {
                     None,
                     None,
                 );
-            }
-            // debug builds: open the inspector so runtime JS errors are visible
-            #[cfg(debug_assertions)]
-            if let Some(w) = app.get_webview_window("main") {
-                w.open_devtools();
             }
             Ok(())
         })

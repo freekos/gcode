@@ -16,6 +16,7 @@
     taskContext,
     projectAdd,
     pickFolder,
+    revealProject,
     type Project,
     type Task,
     type ThreadEvent,
@@ -382,11 +383,24 @@
     {:else}
       {#each tree as node (node.project.id)}
         <div class="pnode">
-          <button class="phead" onclick={() => toggleProject(node.project.id)}>
-            <span class="chev" class:closed={collapsed[node.project.id]}>▾</span>
-            <span class="pname2" class:pactive={project?.id === node.project.id}>{node.project.name}</span>
-            <span class="pmeta">{node.tasks.length}</span>
-          </button>
+          <div class="phead-wrap">
+            <button class="phead" onclick={() => toggleProject(node.project.id)}>
+              <span class="chev" class:closed={collapsed[node.project.id]}>▾</span>
+              <span class="pname2" class:pactive={project?.id === node.project.id}>{node.project.name}</span>
+              <span class="pmeta">{node.tasks.length}</span>
+            </button>
+            <span class="p-actions">
+              <button class="iconbtn sm" title="Открыть папку проекта" onclick={() => revealProject(node.project.path)}>
+                <svg class="ic" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>
+              </button>
+              <button class="iconbtn sm" title={collapsed[node.project.id] ? "Развернуть" : "Свернуть"} onclick={() => toggleProject(node.project.id)}>
+                <svg class="ic" viewBox="0 0 16 16"><path d="M3 4.5h10M5.5 8h7.5M8 11.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              </button>
+              <button class="iconbtn sm" title="Новая задача в проекте" onclick={() => { project = node.project; createOpen = true; }}>
+                <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+              </button>
+            </span>
+          </div>
           {#if !collapsed[node.project.id]}
             <div class="plist">
               {#if node.tasks.length === 0}
@@ -827,6 +841,21 @@
   .newtask:hover { background: var(--surface-2); color: var(--text-primary); }
   .hk-static { margin-left: auto; }
   .pnode { display: flex; flex-direction: column; margin-bottom: 4px; }
+  .phead-wrap { display: flex; align-items: center; position: relative; }
+  .phead-wrap .phead { flex: 1; }
+  .p-actions {
+    position: absolute;
+    right: 2px;
+    display: inline-flex;
+    gap: 1px;
+    opacity: 0;
+    transition: opacity var(--t-fast) ease-out;
+    background: var(--surface-2);
+    border-radius: var(--r-md);
+  }
+  .phead-wrap:hover .p-actions { opacity: 1; }
+  .phead-wrap:hover .pmeta { opacity: 0; }
+  .iconbtn.sm { width: 22px; height: 22px; }
   .phead {
     display: flex; align-items: center; gap: 6px;
     background: transparent; border: 0; cursor: pointer; text-align: left;
