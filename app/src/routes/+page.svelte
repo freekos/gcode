@@ -49,6 +49,23 @@
   let limit: { kind: string; resetsAt: number } | undefined = $state();
   let paletteOpen = $state(false);
   let collapsed: Record<number, boolean> = $state({});
+  let sbw = $state(260);
+
+  function startResize(e: PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sbw;
+    const move = (ev: PointerEvent) => {
+      sbw = Math.min(420, Math.max(200, startW + ev.clientX - startX));
+    };
+    const up = () => {
+      localStorage.setItem("gcode.sidebar.width", String(sbw));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
 
   function toggleProject(id: number) {
     collapsed[id] = !collapsed[id];
@@ -174,6 +191,7 @@
     } catch {
       collapsed = {};
     }
+    sbw = Number(localStorage.getItem("gcode.sidebar.width") ?? 260) || 260;
     reload();
     let un: (() => void) | undefined;
     let unThread: (() => void) | undefined;
@@ -294,7 +312,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout" class:with-ctx={!!selected}>
+<div class="layout" class:with-ctx={!!selected} style="--sbw:{sbw}px">
   <aside>
     <div class="proj">
       <span class="pname">g<b style="color:var(--accent)">code</b></span>
@@ -342,6 +360,7 @@
         <span class="plus">＋</span> проект
       </button>
     {/if}
+    <div class="sb-resize" role="separator" aria-orientation="vertical" aria-label="Ширина сайдбара" onpointerdown={startResize}></div>
   </aside>
 
   <main>
@@ -541,11 +560,11 @@
 <style>
   .layout {
     display: grid;
-    grid-template-columns: 260px 1fr;
+    grid-template-columns: var(--sbw, 260px) 1fr;
     grid-template-rows: 1fr auto;
     height: 100vh;
   }
-  .layout.with-ctx { grid-template-columns: 260px 1fr 230px; }
+  .layout.with-ctx { grid-template-columns: var(--sbw, 260px) 1fr 230px; }
   .statusbar {
     grid-column: 1 / -1;
     display: flex;
@@ -617,6 +636,7 @@
   .send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .perr { color: var(--diff-del); font-size: 12px; margin: 6px 0 0; }
   aside {
+    position: relative;
     background: var(--surface-1);
     border-right: 1px solid var(--border-subtle);
     padding: 12px;
@@ -625,6 +645,22 @@
     gap: 8px;
     overflow-y: auto;
   }
+  /* native window: vibrancy glass shows through the translucent sidebar */
+  :global(:root.native) aside {
+    background: color-mix(in oklab, var(--surface-1) 55%, transparent);
+  }
+  :global(:root.native) main { background: var(--surface-0); }
+  :global(:root.native) .statusbar { background: color-mix(in oklab, var(--surface-1) 55%, transparent); }
+  .sb-resize {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 20;
+  }
+  .sb-resize:hover { background: var(--accent-soft); }
   .proj { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
   .pname { font-weight: 700; font-size: 14px; font-family: var(--font-mono); }
   .demo {

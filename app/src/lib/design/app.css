@@ -39,6 +39,15 @@ html,
 body {
   height: 100%;
   background: var(--surface-0);
+}
+
+/* Native (Tauri) window: macOS vibrancy shows through transparent regions —
+   the sidebar becomes translucent glass, the content column stays opaque. */
+:root.native body {
+  background: transparent;
+}
+html {
+  height: 100%;
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 13px;

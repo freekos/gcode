@@ -269,13 +269,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            use tauri::Manager;
+            // macOS: translucent sidebar material behind transparent regions
+            #[cfg(target_os = "macos")]
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = window_vibrancy::apply_vibrancy(
+                    &w,
+                    window_vibrancy::NSVisualEffectMaterial::Sidebar,
+                    None,
+                    None,
+                );
+            }
             // debug builds: open the inspector so runtime JS errors are visible
             #[cfg(debug_assertions)]
-            {
-                use tauri::Manager;
-                if let Some(w) = app.get_webview_window("main") {
-                    w.open_devtools();
-                }
+            if let Some(w) = app.get_webview_window("main") {
+                w.open_devtools();
             }
             Ok(())
         })

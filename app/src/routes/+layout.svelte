@@ -5,6 +5,7 @@
   let fatal = $state("");
 
   onMount(() => {
+    if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("native");
     const onErr = (e: ErrorEvent) => (fatal = `${e.message}\n${e.filename}:${e.lineno}`);
     const onRej = (e: PromiseRejectionEvent) => (fatal = `unhandled rejection: ${e.reason}`);
     window.addEventListener("error", onErr);

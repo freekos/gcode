@@ -6,20 +6,21 @@
    remaps these same semantic tokens. */
 
 :root {
-  /* surfaces — 4 elevation levels */
-  --surface-0: oklch(16.5% 0.012 262);
-  --surface-1: oklch(19.5% 0.014 262);
-  --surface-2: oklch(23.5% 0.016 262);
-  --surface-3: oklch(28% 0.018 262);
+  /* surfaces — 4 elevation levels. NEUTRAL graphite (sampled from ZCode:
+     center #161616, sidebar #2a2a2d) — the earlier hue-262 tint read "dark blue". */
+  --surface-0: oklch(20.5% 0.003 280);
+  --surface-1: oklch(25% 0.004 280);
+  --surface-2: oklch(28.5% 0.005 280);
+  --surface-3: oklch(32.5% 0.006 280);
 
-  --border-subtle: oklch(32% 0.02 262 / 0.6);
-  --border-strong: oklch(42% 0.02 262 / 0.8);
+  --border-subtle: oklch(36% 0.005 280 / 0.55);
+  --border-strong: oklch(46% 0.006 280 / 0.75);
 
   /* text */
-  --text-primary: oklch(93% 0.008 262);
-  --text-secondary: oklch(72% 0.012 262);
-  --text-muted: oklch(55% 0.014 262);
-  --text-disabled: oklch(42% 0.012 262);
+  --text-primary: oklch(93% 0.004 280);
+  --text-secondary: oklch(72% 0.005 280);
+  --text-muted: oklch(55% 0.006 280);
+  --text-disabled: oklch(42% 0.006 280);
 
   /* accent — QUIET by decision: chroma 0.10 (bright would fight the statuses).
      Used ONLY for: focus ring, selection, one primary button, "next" step. */
