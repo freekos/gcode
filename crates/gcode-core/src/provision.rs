@@ -9,7 +9,7 @@
 //!    reserved task, journal the failure. Disk and state stay clean.
 
 use crate::actor::StateHandle;
-use crate::domain::{slugify, Task};
+use crate::domain::Task;
 use crate::error::{CoreError, Result};
 use crate::git;
 use crate::queues::KeyedQueues;
@@ -24,7 +24,9 @@ pub struct ProvisionResult {
 }
 
 /// Create a task: reserve in state, then provision one worktree per repo.
-/// `repo_names` empty ⇒ all repos of the project.
+/// `repo_names` empty ⇒ all repos of the project. Names fall back to
+/// transliteration; prefer `provision_task_named` with AI-generated names
+/// (git branches follow git conventions — see namer.rs).
 pub fn provision_task(
     handle: &StateHandle,
     queues: &KeyedQueues,
@@ -32,6 +34,19 @@ pub fn provision_task(
     title: &str,
     repo_names: &[String],
 ) -> Result<ProvisionResult> {
+    let names = crate::namer::fallback(title);
+    provision_task_named(handle, queues, project_name, &names, repo_names)
+}
+
+/// Same as `provision_task` but with explicit (usually AI-suggested) names.
+pub fn provision_task_named(
+    handle: &StateHandle,
+    queues: &KeyedQueues,
+    project_name: &str,
+    names: &crate::namer::TaskNames,
+    repo_names: &[String],
+) -> Result<ProvisionResult> {
+    let title = &names.title;
     let pname = project_name.to_string();
     let (project, all_repos) = handle.call(move |st| -> Result<_> {
         let p = st.project_by_name(&pname)?;
@@ -61,8 +76,8 @@ pub fn provision_task(
         return Err(CoreError::Invalid("project has no repositories".into()));
     }
 
-    let slug = slugify(title);
-    let branch = slug.clone();
+    let slug = names.branch.clone();
+    let branch = names.branch.clone();
     let root = Path::new(&project.path)
         .join(".gcode")
         .join("tasks")

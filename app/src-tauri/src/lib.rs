@@ -2,7 +2,7 @@
 //! All state access goes through the core's single-writer actor — the UI never
 //! touches SQLite or git directly.
 
-use gcode_core::{provision, scan, KeyedQueues, State, StateHandle, TaskStatus};
+use gcode_core::{namer, provision, scan, KeyedQueues, State, StateHandle, TaskStatus};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -133,9 +133,12 @@ fn task_create(
     let handle = app.handle.clone();
     let queues = app.queues.clone();
     std::thread::spawn(move || {
-        let res = provision::provision_task(&handle, &queues, &project.name, &prompt, &[]);
+        // Gaziz's rule: humans write prompts; the AI names the task and the branch
+        // (git convention, english kebab-case). Transliteration is the fallback.
+        let names = namer::suggest_names("claude", &prompt, std::time::Duration::from_secs(15));
+        let res = provision::provision_task_named(&handle, &queues, &project.name, &names, &[]);
         let payload = match &res {
-            Ok(r) => serde_json::json!({ "ok": true, "slug": r.task.slug }),
+            Ok(r) => serde_json::json!({ "ok": true, "slug": r.task.slug, "ai_named": names.ai }),
             Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }),
         };
         let _ = app_handle.emit("tasks-changed", payload);

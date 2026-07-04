@@ -11,6 +11,7 @@ pub mod domain;
 pub mod engine;
 pub mod error;
 pub mod git;
+pub mod namer;
 pub mod provision;
 pub mod queues;
 pub mod runner;

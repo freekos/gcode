@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use gcode_core::archive::{archive_task_full, restore_task_full};
 use gcode_core::engine::{AgentEvent, ClaudeEngine};
-use gcode_core::provision::provision_task;
+use gcode_core::provision::provision_task_named;
 use gcode_core::runner::run_thread;
 use gcode_core::{scan, KeyedQueues, State, StateHandle};
 use std::path::PathBuf;
@@ -40,15 +40,18 @@ enum Command {
 
 #[derive(Subcommand)]
 enum TaskCmd {
-    /// Create a task: one git worktree per repo, branch created immediately
+    /// Create a task from a prompt: AI names the task + git branch, one worktree per repo
     New {
         /// Project name
         project: String,
-        /// Task title (slug and branch are derived from it)
+        /// Task prompt ("что сделать") — the AI derives title and branch from it
         title: String,
         /// Comma-separated repo names (default: all repos of the project)
         #[arg(long, value_delimiter = ',')]
         repos: Vec<String>,
+        /// Skip AI naming (fallback: transliterated slug)
+        #[arg(long)]
+        no_ai: bool,
     },
     /// List tasks of a project
     Ls {
@@ -172,19 +175,37 @@ fn main() {
                     project,
                     title,
                     repos,
-                } => match provision_task(&handle, &queues, &project, &title, &repos) {
-                    Ok(res) => {
-                        println!(
-                            "task '{}' created (branch {}):",
-                            res.task.slug, res.task.branch
-                        );
-                        println!("  root: {}", res.root.display());
-                        for (name, wt) in &res.worktrees {
-                            println!("  {name}  ->  {}", wt.display());
+                    no_ai,
+                } => {
+                    let names = if no_ai {
+                        gcode_core::namer::fallback(&title)
+                    } else {
+                        gcode_core::namer::suggest_names(
+                            "claude",
+                            &title,
+                            std::time::Duration::from_secs(15),
+                        )
+                    };
+                    match provision_task_named(&handle, &queues, &project, &names, &repos) {
+                        Ok(res) => {
+                            println!(
+                                "task '{}' created (branch {}{}):",
+                                res.task.title,
+                                res.task.branch,
+                                if names.ai {
+                                    ", ai-named"
+                                } else {
+                                    ", translit fallback"
+                                }
+                            );
+                            println!("  root: {}", res.root.display());
+                            for (name, wt) in &res.worktrees {
+                                println!("  {name}  ->  {}", wt.display());
+                            }
                         }
+                        Err(e) => die(e),
                     }
-                    Err(e) => die(e),
-                },
+                }
                 TaskCmd::Ls { project, all } => {
                     let p = handle
                         .call(move |st| st.project_by_name(&project))
