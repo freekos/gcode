@@ -45,6 +45,7 @@
   import { autogrow } from "$lib/actions";
   import Editor from "$lib/components/Editor.svelte";
   import FileTree from "$lib/components/FileTree.svelte";
+  import Md from "$lib/components/Md.svelte";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped" | "uquote"; text: string };
   type ThreadState = {
@@ -305,14 +306,6 @@
 
   type Block = { kind: "msg"; item: ThreadItem } | { kind: "tools"; tools: string[] };
 
-  /// light inline-markdown: `code` chips in agent text
-  function inlineSegs(text: string): { code: boolean; t: string }[] {
-    return text.split(/(`[^`\n]+`)/g).filter(Boolean).map((part) =>
-      part.startsWith("`") && part.endsWith("`")
-        ? { code: true, t: part.slice(1, -1) }
-        : { code: false, t: part },
-    );
-  }
   // consecutive tool events fold into one collapsible block (review: tool spam)
   const blocks = $derived.by(() => {
     const out: Block[] = [];
@@ -886,7 +879,7 @@
                     <svg class="ic-xs" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
                   </button>
                 </span>
-              <div class="m-agent">{#each inlineSegs(b.item.text) as seg, si (si)}{#if seg.code}<code class="mchip">{seg.t}</code>{:else}{seg.t}{/if}{/each}</div>
+              <div class="m-agent"><Md text={b.item.text} /></div>
               </div>
             {:else if b.item.kind === "review"}
               {@const revs = JSON.parse(b.item.text)}
@@ -1631,13 +1624,6 @@
     padding: 9px 13px;
     max-width: 66% !important;
     margin-right: 0 !important;
-  }
-  .mchip {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    background: var(--surface-2);
-    border-radius: 6px;
-    padding: 1px 7px;
   }
   .m-review {
     background: var(--surface-2);

@@ -164,7 +164,12 @@ export async function taskContext(taskId: number): Promise<TaskContext> {
 export async function threadSend(taskId: number, prompt: string): Promise<void> {
   if (!inTauri) {
     // demo: stream a scripted reply
-    const chunks = ["Смотрю код… ", "нашёл причину: ", "редирект собирался без webview-куки. ", "Исправил и добавил тест."];
+    const chunks = [
+      "## План редизайна\n\n",
+      "Смотрю код… **нашёл причину**:\n",
+      "- фронт: `svelte`-компоненты в `src/screens`\n- бэк: пересмотреть `api.ts`\n\n",
+      "```ts\nconst url = withWebviewCookie(base);\nreturn url;\n```\n\nИсправил и добавил тест.",
+    ];
     const fire = (detail: ThreadEvent, delay: number) =>
       setTimeout(() => window.dispatchEvent(new CustomEvent("demo-thread-event", { detail })), delay);
     fire({ task_id: taskId, kind: "limit", text: "five_hour", ok: null, resets_at: Math.floor(Date.now() / 1000) + 7200 }, 300);
