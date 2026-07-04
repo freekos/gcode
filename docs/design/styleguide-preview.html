@@ -213,16 +213,16 @@
   .ops-act { display: flex; gap: 8px; }
   .ops-hist { margin-top: 14px; }
 
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 12px; }
-  .tab {
-    font: 500 12.5px var(--font-ui); color: var(--text-secondary);
-    background: transparent; border: 0; border-bottom: 2px solid transparent;
-    padding: 6px 12px; cursor: pointer; transition: color var(--t-fast) ease-out;
-  }
-  .tab:hover { color: var(--text-primary); }
-  .tab.on { color: var(--text-primary); border-bottom-color: var(--accent); }
-  .tabpane { display: none; }
-  .tabpane.on { display: block; }
+  .ops-grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 720px) { .ops-grid { grid-template-columns: 1fr; } }
+  .ops-zone { background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--r-lg); padding: 12px 14px; }
+  .zone-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); margin-bottom: 8px; }
+  .env-card { padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+  .env-card:last-child { border-bottom: none; }
+  .env-h { display: flex; justify-content: space-between; align-items: baseline; }
+  .env-m { font-size: 11px; color: var(--text-secondary); margin: 2px 0 6px; }
+  .env-a { display: flex; gap: 6px; }
+  .hist-scroll { max-height: 150px; overflow-y: auto; }
 
   .ops-task { padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
   .ops-task.dim { opacity: .55; }
@@ -413,56 +413,59 @@
       <button class="btn" onclick="document.getElementById('dlg').showModal()">Модалка-подтверждение</button>
       <button class="btn primary" onclick="document.getElementById('ops').showModal()">Ops-модалка ⌘O</button>
     </div>
-    <dialog id="ops" style="width:min(720px,94vw)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <dialog id="ops" style="width:min(880px,96vw)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         <h3 style="margin:0">Ops · azi</h3>
-        <span class="tok">факты из git/CI — и следующий шаг для каждой задачи</span>
+        <span class="tok">всё в одном месте: задачи → окружения → история</span>
         <span class="spacer" style="flex:1"></span>
         <span class="kbd">Esc</span>
       </div>
-      <div class="tabs">
-        <button class="tab on" data-tab="t-tasks">Задачи</button>
-        <button class="tab" data-tab="t-envs">Окружения</button>
-        <button class="tab" data-tab="t-hist">История</button>
+
+      <div class="ops-grid">
+        <div class="ops-zone">
+          <div class="zone-lbl">Задачи — следующий шаг</div>
+          <div class="ops-task">
+            <div class="ot-head"><span class="dot" style="background:var(--status-review)"></span><b>fix-login</b>
+              <span class="ot-why">review пройден · в integration НЕ влита — блокирует stage</span></div>
+            <div class="ot-pipe"><span class="st done">код ✓</span><span class="st done">review ✓</span><span class="st next">влить</span><span class="st">stage</span><span class="st">release</span></div>
+            <div class="ot-act"><button class="btn primary">Merge → integration</button><button class="btn">Создать PR</button></div>
+          </div>
+          <div class="ops-task">
+            <div class="ot-head"><span class="dot" style="background:var(--status-done)"></span><b>webview-fix</b>
+              <span class="ot-why">влита · integration опережает stage на 2 коммита</span></div>
+            <div class="ot-pipe"><span class="st done">код ✓</span><span class="st done">review ✓</span><span class="st done">влита ✓</span><span class="st next">stage</span><span class="st">release</span></div>
+            <div class="ot-act"><button class="btn primary">Deploy stage</button><button class="btn ghost">Что поедет? (дифф)</button></div>
+          </div>
+          <div class="ops-task dim" style="border-bottom:none">
+            <div class="ot-head"><span class="dot" style="background:var(--status-running);animation:pulse 2s ease-in-out infinite"></span><b>add-tests</b>
+              <span class="ot-why">агент работает — действий пока нет</span></div>
+          </div>
+        </div>
+
+        <div class="ops-zone">
+          <div class="zone-lbl">Окружения</div>
+          <div class="env-card"><div class="env-h"><b>Test</b><span class="tok" style="color:var(--status-done)">✓ 30м назад</span></div><div class="mono env-m">fix-login@2167b9</div><div class="env-a"><button class="btn" style="padding:3px 10px;font-size:12px">Тест</button><button class="btn ghost" style="padding:3px 8px;font-size:12px">Логи</button></div></div>
+          <div class="env-card"><div class="env-h"><b>Stage</b><span class="tok" style="color:var(--status-done)">✓ вчера</span></div><div class="mono env-m">main@49e2e6</div><div class="tok" style="margin:2px 0 6px">отстаёт на 2 коммита</div><div class="env-a"><button class="btn primary" style="padding:3px 10px;font-size:12px">Deploy</button><button class="btn ghost" style="padding:3px 8px;font-size:12px">Логи</button></div></div>
+          <div class="env-card"><div class="env-h"><b>Prod</b><span class="tok" style="color:var(--diff-del)">✗ e2e · 3 дня</span></div><div class="mono env-m">v2.14.0</div><div class="env-a"><button class="btn danger" style="padding:3px 10px;font-size:12px">Release</button><button class="btn ghost" style="padding:3px 8px;font-size:12px">Логи</button></div></div>
+        </div>
       </div>
 
-      <div id="t-tasks" class="tabpane on">
-        <div class="ops-task">
-          <div class="ot-head"><span class="dot" style="background:var(--status-review)"></span><b>fix-login</b>
-            <span class="ot-why">review пройден · в integration НЕ влита — это блокирует stage</span></div>
-          <div class="ot-pipe"><span class="st done">код ✓</span><span class="st done">review ✓</span><span class="st next">влить</span><span class="st">stage</span><span class="st">release</span></div>
-          <div class="ot-act"><button class="btn primary">Merge → integration</button><button class="btn">Создать PR</button></div>
+      <div class="ops-zone" style="margin-top:14px">
+        <div class="zone-lbl" style="display:flex;gap:10px;align-items:center">История
+          <button class="engine-pick" style="font-size:11px">все операции ▾</button>
+          <button class="engine-pick" style="font-size:11px">все задачи ▾</button>
         </div>
-        <div class="ops-task">
-          <div class="ot-head"><span class="dot" style="background:var(--status-done)"></span><b>webview-fix</b>
-            <span class="ot-why">влита · integration опережает stage на 2 коммита — можно катить</span></div>
-          <div class="ot-pipe"><span class="st done">код ✓</span><span class="st done">review ✓</span><span class="st done">влита ✓</span><span class="st next">stage</span><span class="st">release</span></div>
-          <div class="ot-act"><button class="btn primary">Deploy stage</button><button class="btn ghost">Что поедет? (дифф)</button></div>
+        <div class="hist-scroll">
+          <div class="hist-row"><span style="color:var(--status-running)">⏳</span><span class="hist-what">containerize test · add-tests</span><span class="tok">идёт 2м</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Логи</button></div>
+          <div class="hist-row"><span style="color:var(--status-done)">✓</span><span class="hist-what">deploy stage · fix-login</span><span class="tok">4м · сегодня 09:12</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Логи</button></div>
+          <div class="hist-row"><span style="color:var(--diff-del)">✗</span><span class="hist-what">e2e prod-smoke</span><span class="tok">вчера 18:40</span><button class="btn" style="padding:2px 10px;font-size:12px">Разбор</button></div>
+          <div class="hist-row"><span style="color:var(--status-done)">✓</span><span class="hist-what">merge → integration · webview-fix</span><span class="tok">вчера 16:05</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Дифф</button></div>
+          <div class="hist-row" style="border-bottom:none"><span style="color:var(--status-done)">✓</span><span class="hist-what">deploy test · fix-login</span><span class="tok">вчера 12:30</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Логи</button></div>
         </div>
-        <div class="ops-task dim">
-          <div class="ot-head"><span class="dot" style="background:var(--status-running);animation:pulse 2s ease-in-out infinite"></span><b>add-tests</b>
-            <span class="ot-why">агент ещё работает — действий нет</span></div>
-        </div>
+        <div class="tok" style="margin-top:6px">операции фоновые — модалка закрывается, статусы живут здесь · полная история скроллится</div>
       </div>
 
-      <div id="t-envs" class="tabpane">
-        <div class="ops-row"><div class="ops-env">Test</div><div class="ops-what"><span class="mono">fix-login@2167b9</span><span class="tok">30 мин назад · pipeline <span style="color:var(--status-done)">✓</span></span></div><div class="ops-act"><button class="btn">Тест</button><button class="btn ghost">Логи</button></div></div>
-        <div class="ops-row"><div class="ops-env">Stage</div><div class="ops-what"><span class="mono">main@49e2e6</span><span class="tok">вчера · pipeline <span style="color:var(--status-done)">✓</span> · отстаёт от integration на 2 коммита</span></div><div class="ops-act"><button class="btn primary">Deploy</button><button class="btn ghost">Логи</button></div></div>
-        <div class="ops-row"><div class="ops-env">Prod</div><div class="ops-what"><span class="mono">v2.14.0</span><span class="tok">3 дня назад · e2e <span style="color:var(--diff-del)">✗</span></span></div><div class="ops-act"><button class="btn danger">Release</button><button class="btn ghost">Логи</button></div></div>
-      </div>
-
-      <div id="t-hist" class="tabpane">
-        <div class="rowflex" style="margin-bottom:8px">
-          <button class="engine-pick">все операции ▾</button><button class="engine-pick">все задачи ▾</button><input class="input" style="width:160px;padding:4px 10px;font-size:12px" placeholder="Поиск…">
-        </div>
-        <div class="hist-row"><span style="color:var(--status-running)">⏳</span><span class="hist-what">containerize test · add-tests</span><span class="tok">идёт 2м</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Логи</button></div>
-        <div class="hist-row"><span style="color:var(--status-done)">✓</span><span class="hist-what">deploy stage · fix-login</span><span class="tok">4м · сегодня 09:12</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Логи</button></div>
-        <div class="hist-row"><span style="color:var(--diff-del)">✗</span><span class="hist-what">e2e prod-smoke</span><span class="tok">вчера 18:40</span><button class="btn" style="padding:2px 10px;font-size:12px">Разбор</button></div>
-        <div class="hist-row"><span style="color:var(--status-done)">✓</span><span class="hist-what">merge → integration · webview-fix</span><span class="tok">вчера 16:05</span><button class="btn ghost" style="padding:2px 10px;font-size:12px">Дифф</button></div>
-        <div class="tok" style="margin-top:8px">операции фоновые — модалка закрывается, статусы живут здесь</div>
-      </div>
-
-      <div class="rowflex" style="justify-content:flex-end;margin-top:14px">
+      <div class="rowflex" style="justify-content:flex-end;margin-top:12px">
         <button class="btn ghost" onclick="document.getElementById('ops').close()">Закрыть</button>
       </div>
     </dialog>
@@ -531,12 +534,6 @@
 </div>
 
 <script>
-  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
-    document.querySelectorAll('.tabpane').forEach(x => x.classList.remove('on'));
-    t.classList.add('on');
-    document.getElementById(t.dataset.tab).classList.add('on');
-  }));
   const root = document.documentElement;
   document.querySelectorAll('.sw').forEach(btn => {
     btn.addEventListener('click', () => {
