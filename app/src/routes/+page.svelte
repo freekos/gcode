@@ -46,7 +46,7 @@
   import Editor from "$lib/components/Editor.svelte";
   import FileTree from "$lib/components/FileTree.svelte";
 
-  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped"; text: string };
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped" | "uquote"; text: string };
   type ThreadState = {
     items: ThreadItem[];
     running: boolean;
@@ -159,16 +159,18 @@
     editorOpen = true;
   }
 
+  // cmd-L attachments: chips above the composer (Cursor-style), payload on send
+  let attachments: { loc: string; code: string }[] = $state([]);
+
   function quoteReply(text: string) {
     const q = text.split("\n").slice(0, 6).map((l) => `> ${l}`).join("\n");
     msg = `${q}\n\n${msg}`;
     document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   }
 
-  // cmd-L: drop a code quote into the agent composer (points the agent at code)
+  // cmd-L: attach a code quote as a chip (the prompt field stays clean)
   function quoteToComposer(loc: string, code: string) {
-    const fence = "```";
-    msg = `${msg ? msg + "\n\n" : ""}${loc}\n${fence}\n${code}\n${fence}\n`;
+    attachments = [...attachments, { loc, code }];
     document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   }
 
@@ -332,13 +334,34 @@
   }
 
   function sendMsg() {
-    if (!selected || !msg.trim()) return;
+    if (!selected || (!msg.trim() && attachments.length === 0)) return;
     const t = th(selected.id);
-    if (t.running) {
-      t.queue.push(msg.trim());
-    } else {
-      fire(selected.id, msg.trim());
+    const text = msg.trim();
+    if (attachments.length === 0) {
+      if (t.running) t.queue.push(text);
+      else fire(selected.id, text);
+      msg = "";
+      return;
     }
+    const fence = "```";
+    const full = [text, ...attachments.map((a) => `${a.loc}\n${fence}\n${a.code}\n${fence}`)]
+      .filter(Boolean)
+      .join("\n\n");
+    if (t.running) {
+      t.queue.push(full);
+    } else {
+      t.items.push({
+        kind: "uquote",
+        text: JSON.stringify({ text, atts: attachments.map((a) => a.loc) }),
+      });
+      t.running = true;
+      t.waiting = true;
+      t.turnStart = Date.now();
+      stopRequested = false;
+      scrollDown();
+      threadSend(selected.id, full);
+    }
+    attachments = [];
     msg = "";
   }
 
@@ -872,6 +895,16 @@
                   </div>
                 {/each}
               </div>
+            {:else if b.item.kind === "uquote"}
+              {@const uq = JSON.parse(b.item.text)}
+              <div class="m-user-wrap">
+                <div class="m-user">
+                  {#if uq.text}{uq.text}{/if}
+                  <div class="uq-atts">
+                    {#each uq.atts as a (a)}<span class="uq-chip mono">📄 {a}</span>{/each}
+                  </div>
+                </div>
+              </div>
             {:else if b.item.kind === "stopped"}
               <div class="m-stop">⏹ Остановлено</div>
             {:else if b.item.kind === "turn"}
@@ -884,6 +917,16 @@
       </div>
       <div class="composer">
         <div class="c-inner glass-rim">
+          {#if attachments.length}
+            <div class="att-row">
+              {#each attachments as a, i (i)}
+                <span class="uq-chip mono" data-tip={a.code.split("\n").slice(0, 3).join(" ⏎ ").slice(0, 120)}>
+                  📄 {a.loc.split("/").slice(-1)[0]}
+                  <button class="x" aria-label="Убрать" onclick={() => (attachments = attachments.filter((_, j) => j !== i))}>×</button>
+                </span>
+              {/each}
+            </div>
+          {/if}
           <textarea
             use:autogrow
             bind:value={msg}
@@ -1611,6 +1654,20 @@
     margin: 4px 0 0;
   }
   .m-stop { color: var(--text-muted); font-size: 12px; }
+  .att-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 12px 0; }
+  .uq-atts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .uq-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface-3);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+  }
+  .uq-chip .x { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0; }
+  .uq-chip .x:hover { color: var(--diff-del); }
   .m-turn {
     display: flex;
     align-items: center;
