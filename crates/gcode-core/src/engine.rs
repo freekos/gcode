@@ -20,8 +20,9 @@ pub enum AgentEvent {
     TextDelta(String),
     /// A whole assistant text block (fallback when no deltas were streamed).
     WholeText(String),
-    /// The agent invoked a tool (informational).
-    ToolUse(String),
+    /// The agent invoked a tool (informational): name + best-effort human detail
+    /// (command / file path / pattern from the tool input).
+    ToolUse(String, String),
     /// Subscription window info (honest facts only: window kind + reset time;
     /// the headless stream does NOT carry used percentages).
     RateLimit { kind: String, resets_at: i64 },
@@ -172,7 +173,16 @@ pub fn parse_line(line: &str) -> Vec<AgentEvent> {
                         }
                         "tool_use" => {
                             if let Some(n) = b["name"].as_str() {
-                                out.push(AgentEvent::ToolUse(n.to_string()));
+                                let inp = &b["input"];
+                                let detail = inp["command"]
+                                    .as_str()
+                                    .or_else(|| inp["file_path"].as_str())
+                                    .or_else(|| inp["path"].as_str())
+                                    .or_else(|| inp["pattern"].as_str())
+                                    .or_else(|| inp["url"].as_str())
+                                    .unwrap_or("");
+                                let detail: String = detail.chars().take(80).collect();
+                                out.push(AgentEvent::ToolUse(n.to_string(), detail));
                             }
                         }
                         _ => {}

@@ -192,10 +192,14 @@ fn thread_send(
                         ok: None,
                         resets_at: None,
                     },
-                    AgentEvent::ToolUse(n) => ThreadEvent {
+                    AgentEvent::ToolUse(n, detail) => ThreadEvent {
                         task_id,
                         kind: "tool".into(),
-                        text: n.clone(),
+                        text: if detail.is_empty() {
+                            n.clone()
+                        } else {
+                            format!("{n} · {detail}")
+                        },
                         ok: None,
                         resets_at: None,
                     },

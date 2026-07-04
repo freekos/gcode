@@ -139,9 +139,11 @@ export async function threadSend(taskId: number, prompt: string): Promise<void> 
     const fire = (detail: ThreadEvent, delay: number) =>
       setTimeout(() => window.dispatchEvent(new CustomEvent("demo-thread-event", { detail })), delay);
     fire({ task_id: taskId, kind: "limit", text: "five_hour", ok: null, resets_at: Math.floor(Date.now() / 1000) + 7200 }, 300);
-    fire({ task_id: taskId, kind: "tool", text: "Read", ok: null }, 500);
+    fire({ task_id: taskId, kind: "tool", text: "Read · server/src/auth.ts", ok: null }, 500);
+    fire({ task_id: taskId, kind: "tool", text: "Bash · pnpm test auth", ok: null }, 650);
+    fire({ task_id: taskId, kind: "tool", text: "Read · crm/src/session.ts", ok: null }, 800);
     chunks.forEach((c, i) => fire({ task_id: taskId, kind: "delta", text: c, ok: null }, 900 + i * 500));
-    fire({ task_id: taskId, kind: "tool", text: "Edit", ok: null }, 1600);
+    fire({ task_id: taskId, kind: "tool", text: "Edit · server/src/auth.ts", ok: null }, 1600);
     fire({ task_id: taskId, kind: "done", text: "", ok: true }, 900 + chunks.length * 500 + 300);
     return;
   }

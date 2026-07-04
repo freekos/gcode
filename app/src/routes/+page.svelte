@@ -77,6 +77,32 @@
   }
   const cur = $derived(selected ? (threads[selected.id] ?? EMPTY) : EMPTY);
 
+  type Block = { kind: "msg"; item: ThreadItem } | { kind: "tools"; tools: string[] };
+  // consecutive tool events fold into one collapsible block (review: tool spam)
+  const blocks = $derived.by(() => {
+    const out: Block[] = [];
+    for (const it of cur.items) {
+      if (it.kind === "tool") {
+        const last = out[out.length - 1];
+        if (last?.kind === "tools") last.tools.push(it.text);
+        else out.push({ kind: "tools", tools: [it.text] });
+      } else {
+        out.push({ kind: "msg", item: it });
+      }
+    }
+    return out;
+  });
+
+  function toolSummary(tools: string[]): string {
+    const counts = new Map<string, number>();
+    for (const t of tools) {
+      const name = t.split(" · ")[0];
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const parts = [...counts.entries()].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n));
+    return `${tools.length} шаг${tools.length === 1 ? "" : tools.length < 5 ? "а" : "ов"} · ${parts.join(" · ")}`;
+  }
+
   function scrollDown() {
     requestAnimationFrame(() => threadBox?.scrollTo({ top: threadBox.scrollHeight }));
   }
@@ -313,15 +339,22 @@
             <p class="branch">.gcode/tasks/{selected.slug}/</p>
           </div>
         {:else}
-          {#each cur.items as it, i (i)}
-            {#if it.kind === "user"}
-              <div class="m-user">{it.text}</div>
-            {:else if it.kind === "agent"}
-              <div class="m-agent">{it.text}</div>
-            {:else if it.kind === "tool"}
-              <div class="m-tool">[{it.text}]</div>
+          {#each blocks as b, i (i)}
+            {#if b.kind === "tools"}
+              <details class="tools">
+                <summary>⚙ {toolSummary(b.tools)}</summary>
+                <div class="tool-list">
+                  {#each b.tools as t, j (j)}
+                    <div class="m-tool">{t}</div>
+                  {/each}
+                </div>
+              </details>
+            {:else if b.item.kind === "user"}
+              <div class="m-user">{b.item.text}</div>
+            {:else if b.item.kind === "agent"}
+              <div class="m-agent">{b.item.text}</div>
             {:else}
-              <div class="m-err">{it.text}</div>
+              <div class="m-err">{b.item.text}</div>
             {/if}
           {/each}
         {/if}
@@ -423,11 +456,11 @@
   />
   <div class="pal-list">
     {#each [
-      { label: "Новая задача", hint: "⌘N", act: () => { paletteOpen = false; createOpen = true; } },
-      { label: "Добавить проект", hint: "", act: () => { paletteOpen = false; addProject(); } },
-      { label: "Styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
-      ...ordered.map((t) => ({ label: t.title, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
-    ].filter((c) => c.label.toLowerCase().includes(palQ.toLowerCase())) as c (c.label)}
+      { label: "Новая задача", key: "cmd-new", hint: "⌘N", act: () => { paletteOpen = false; createOpen = true; } },
+      { label: "Добавить проект", key: "cmd-addproj", hint: "", act: () => { paletteOpen = false; addProject(); } },
+      { label: "Styleguide", key: "cmd-styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
+      ...ordered.map((t) => ({ label: t.title, key: `task-${t.id}`, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
+    ].filter((c) => c.label.toLowerCase().includes(palQ.toLowerCase())) as c, ci (c.key ?? `cmd-${ci}`)}
       <button class="pal-item" onclick={c.act}>
         <span>{c.label}</span>
         {#if c.hint}<Kbd keys={c.hint} />{/if}
@@ -570,7 +603,22 @@
     max-width: 80%;
   }
   .m-agent { color: var(--text-primary); max-width: 92%; white-space: pre-wrap; }
-  .m-tool { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .m-tool { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); padding: 1px 0; }
+  .tools summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+    padding: 3px 8px;
+    background: var(--surface-1);
+    border-radius: var(--r-md);
+    display: inline-block;
+    transition: color var(--t-fast) ease-out, background var(--t-fast) ease-out;
+    user-select: none;
+  }
+  .tools summary:hover { color: var(--text-secondary); background: var(--surface-2); }
+  .tools[open] summary { color: var(--text-secondary); }
+  .tool-list { padding: 6px 10px 2px; border-left: 2px solid var(--border-subtle); margin: 4px 0 0 8px; }
   .m-err { color: var(--diff-del); font-size: 12.5px; }
   .composer { border-top: 1px solid var(--border-subtle); padding: 12px 16px; }
   .composer textarea { margin-bottom: 0; }
