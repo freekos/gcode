@@ -291,3 +291,36 @@ fn task_diff_reports_modified_and_untracked() {
     // unknown repo fails loudly
     assert!(task_diff(&h, res.task.id, "nope").is_err());
 }
+
+#[test]
+fn editor_roundtrip_read_write_list() {
+    use gcode_core::files::{list_files, read_file, write_file};
+    let (h, q, _tmp) = setup();
+    let res = provision_task(&h, &q, "azi", "Editor probe", &[]).unwrap();
+    let id = res.task.id;
+
+    // list contains repo-prefixed files
+    let files = list_files(&h, id).unwrap();
+    assert!(files.iter().any(|f| f == "server/README.md"), "{files:?}");
+
+    // read -> edit -> write -> read back
+    let before = read_file(&h, id, "server", "README.md").unwrap();
+    write_file(
+        &h,
+        id,
+        "server",
+        "README.md",
+        &format!("{before}\nедитор был тут\n"),
+    )
+    .unwrap();
+    let after = read_file(&h, id, "server", "README.md").unwrap();
+    assert!(after.contains("едитор был тут"));
+
+    // new file appears in the list (untracked)
+    write_file(&h, id, "server", "src/new_mod.rs", "pub fn x() {}\n").unwrap();
+    let files2 = list_files(&h, id).unwrap();
+    assert!(files2.iter().any(|f| f == "server/src/new_mod.rs"));
+
+    // escapes rejected
+    assert!(read_file(&h, id, "server", "../outside.txt").is_err());
+}

@@ -332,4 +332,19 @@ export async function taskDiff(taskId: number, repo: string): Promise<DiffFile[]
   return invoke<DiffFile[]>("task_diff", { taskId, repo });
 }
 
+export async function fileRead(taskId: number, repo: string, path: string): Promise<string> {
+  if (!inTauri) return `// demo ${repo}/${path}\nexport function redirect(user: User) {\n  const url = withWebviewCookie(base);\n  return url;\n}\n`;
+  return invoke<string>("file_read", { taskId, repo, path });
+}
+
+export async function fileWrite(taskId: number, repo: string, path: string, content: string): Promise<void> {
+  if (!inTauri) return;
+  return invoke<void>("file_write", { taskId, repo, path, content });
+}
+
+export async function filesList(taskId: number): Promise<string[]> {
+  if (!inTauri) return ["server/src/auth.ts", "server/README.md", "crm/src/api.ts"];
+  return invoke<string[]>("files_list", { taskId });
+}
+
 export const isDemo = !inTauri;

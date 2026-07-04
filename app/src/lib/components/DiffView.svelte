@@ -23,10 +23,12 @@
     groups,
     onsend,
     onselchange,
+    onopen,
   }: {
     groups: DiffGroup[];
     onsend: (comments: PendingComment[]) => void;
     onselchange?: (selecting: boolean) => void;
+    onopen?: (repo: string, path: string) => void;
   } = $props();
 
   let collapsedFiles: Record<string, boolean> = $state({});
@@ -129,6 +131,11 @@
           <span class="grow"></span>
           <DiffStat add={f.add} del={f.del} />
         </button>
+        {#if onopen}
+          <button class="open-ed" data-tip="Открыть в редакторе" aria-label="Открыть в редакторе" onclick={() => onopen?.(g.repo, f.path)}>
+            <svg class="ic-s" viewBox="0 0 16 16"><path d="M10.8 2.8l2.4 2.4L6 12.4l-3 .6.6-3z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+          </button>
+        {/if}
         {#if !collapsedFiles[f.path]}
           <div class="hunks">
             {#each f.hunks as h, hi (hi)}
@@ -209,7 +216,26 @@
     padding: 4px 2px 0;
   }
   .mono { font-family: var(--font-mono); font-size: 11.5px; }
-  .dfile { border-radius: var(--r-lg); background: var(--surface-1); overflow: hidden; }
+  .dfile { border-radius: var(--r-lg); background: var(--surface-1); overflow: hidden; position: relative; }
+  .open-ed {
+    position: absolute;
+    top: 5px;
+    right: 64px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--surface-3);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+  }
+  .dfile:hover .open-ed { display: inline-flex; }
+  .open-ed:hover { color: var(--text-primary); }
+  .ic-s { width: 12px; height: 12px; }
   .dhead {
     display: flex; align-items: center; gap: 8px; width: 100%;
     background: var(--surface-2); border: 0; cursor: pointer;

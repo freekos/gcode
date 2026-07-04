@@ -19,6 +19,9 @@
     taskContext,
     threadHistory,
     taskDiff,
+    fileRead,
+    fileWrite,
+    filesList,
     projectAdd,
     pickFolder,
     revealProject,
@@ -35,6 +38,7 @@
   import DiffStat from "$lib/components/DiffStat.svelte";
   import DiffView, { type PendingComment, type DiffGroup } from "$lib/components/DiffView.svelte";
   import { autogrow } from "$lib/actions";
+  import Editor from "$lib/components/Editor.svelte";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review"; text: string };
   type ThreadState = {
@@ -103,6 +107,55 @@
   let helpOpen = $state(false);
   let diffOpen = $state(false);
   let diffSelecting = $state(false); // a line range is being commented
+  // editor mode in the wide right panel (opens from diff file header / cmd-P)
+  let editorOpen = $state(false);
+  let editorRepo = $state("");
+  let editorPath = $state("");
+  let editorContent = $state("");
+  let filePaletteOpen = $state(false);
+  let fileQ = $state("");
+  let fileList: string[] = $state([]);
+
+  async function openEditor(repo: string, path: string) {
+    if (!selected) return;
+    try {
+      editorContent = await fileRead(selected.id, repo, path);
+    } catch {
+      editorContent = "";
+    }
+    editorRepo = repo;
+    editorPath = path;
+    diffOpen = false;
+    editorOpen = true;
+  }
+
+  function saveEditor(text: string) {
+    if (!selected) return;
+    fileWrite(selected.id, editorRepo, editorPath, text);
+  }
+
+  async function openFilePalette() {
+    if (!selected) return;
+    fileList = await filesList(selected.id);
+    fileQ = "";
+    filePaletteOpen = true;
+  }
+
+  const fileMatches = $derived.by(() => {
+    const q = fileQ.toLowerCase();
+    const scored = fileList.filter((f) => {
+      // simple fuzzy: all query chars appear in order
+      let i = 0;
+      const lf = f.toLowerCase();
+      for (const ch of q) {
+        i = lf.indexOf(ch, i);
+        if (i < 0) return false;
+        i++;
+      }
+      return true;
+    });
+    return scored.slice(0, 12);
+  });
   let diffRepo: string | null = $state(null); // null = все репо
   let diffGroups: DiffGroup[] = $state([]);
 
@@ -337,6 +390,13 @@
       if (e.key === "Escape" && diffOpen && !diffSelecting && !paletteOpen && !addProjOpen) {
         diffOpen = false;
       }
+      if (e.key === "Escape" && editorOpen && !filePaletteOpen) {
+        editorOpen = false;
+      }
+      if (e.metaKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        if (selected) openFilePalette();
+      }
       if (e.metaKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         palQ = "";
@@ -406,6 +466,7 @@
     projectId = p.id;
     diffOpen = false;
     diffRepo = null;
+    editorOpen = false;
     // restore the conversation from the engine transcript on first open
     const st = th(t.id);
     if (st.items.length === 0 && !st.running) {
@@ -462,7 +523,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout" class:with-ctx={!!selected} class:diff-wide={diffOpen} style="--sbw:{sbw}px; --ctxw:{ctxw}px; --diffw:{diffw}px">
+<div class="layout" class:with-ctx={!!selected} class:diff-wide={diffOpen || editorOpen} style="--sbw:{sbw}px; --ctxw:{ctxw}px; --diffw:{diffw}px">
   <aside>
     <div class="drag-strip" data-tauri-drag-region>
       {#if upd}
@@ -633,8 +694,8 @@
           </div>
         {/if}
       </div>
-      {#if diffOpen}
-        <button class="iconbtn" data-tip="Закрыть изменения · Esc" aria-label="Закрыть изменения" onclick={() => (diffOpen = false)}>
+      {#if diffOpen || editorOpen}
+        <button class="iconbtn" data-tip="Закрыть панель · Esc" aria-label="Закрыть панель" onclick={() => { diffOpen = false; editorOpen = false; }}>
           <svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         </button>
       {/if}
@@ -795,7 +856,14 @@
       </div>
     {/if}
   </main>
-  {#if selected && diffOpen}
+  {#if selected && editorOpen}
+    <aside class="ctx ctx-diff">
+      <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
+      {#key `${editorRepo}/${editorPath}`}
+        <Editor content={editorContent} path={editorPath} onsave={saveEditor} />
+      {/key}
+    </aside>
+  {:else if selected && diffOpen}
     <aside class="ctx ctx-diff">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="dp-head">
@@ -810,7 +878,7 @@
           {/if}
         </div>
       </div>
-      <DiffView groups={diffGroups} onsend={sendReview} onselchange={(b) => (diffSelecting = b)} />
+      <DiffView groups={diffGroups} onsend={sendReview} onselchange={(b) => (diffSelecting = b)} onopen={openEditor} />
     </aside>
   {:else if selected}
     <aside class="ctx">
@@ -865,6 +933,38 @@
     <span style="flex:1"></span>
     <Button variant="ghost" onclick={() => (addProjOpen = false)}>Закрыть</Button>
     <Button variant="primary" onclick={submitAddProject}>Добавить</Button>
+  </div>
+</Modal>
+
+<Modal bind:open={filePaletteOpen} width="520px">
+  <!-- svelte-ignore a11y_autofocus -->
+  <input
+    class="pal-input"
+    autofocus
+    placeholder="Файл задачи… (fuzzy, Enter — открыть)"
+    bind:value={fileQ}
+    onkeydown={(e) => {
+      if (e.key === "Enter" && fileMatches[0]) {
+        const [repo, ...rest] = fileMatches[0].split("/");
+        filePaletteOpen = false;
+        openEditor(repo, rest.join("/"));
+      }
+    }}
+  />
+  <div class="pal-list">
+    {#each fileMatches as f (f)}
+      <button
+        class="pal-item"
+        onclick={() => {
+          const [repo, ...rest] = f.split("/");
+          filePaletteOpen = false;
+          openEditor(repo, rest.join("/"));
+        }}
+      >{f}</button>
+    {/each}
+    {#if fileMatches.length === 0}
+      <div class="mut" style="padding:8px 4px">Ничего не найдено</div>
+    {/if}
   </div>
 </Modal>
 

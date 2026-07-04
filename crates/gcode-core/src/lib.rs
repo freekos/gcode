@@ -12,6 +12,7 @@ pub mod diff;
 pub mod domain;
 pub mod engine;
 pub mod error;
+pub mod files;
 pub mod git;
 pub mod namer;
 pub mod provision;

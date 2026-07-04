@@ -357,6 +357,27 @@ fn task_diff(
 }
 
 #[tauri::command]
+fn file_read(app: TState<'_, App>, task_id: i64, repo: String, path: String) -> Result<String, String> {
+    gcode_core::files::read_file(&app.handle, task_id, &repo, &path).map_err(err_s)
+}
+
+#[tauri::command]
+fn file_write(
+    app: TState<'_, App>,
+    task_id: i64,
+    repo: String,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    gcode_core::files::write_file(&app.handle, task_id, &repo, &path, &content).map_err(err_s)
+}
+
+#[tauri::command]
+fn files_list(app: TState<'_, App>, task_id: i64) -> Result<Vec<String>, String> {
+    gcode_core::files::list_files(&app.handle, task_id).map_err(err_s)
+}
+
+#[tauri::command]
 fn task_pin(app: TState<'_, App>, task_id: i64, pinned: bool) -> Result<(), String> {
     app.handle
         .call(move |st| st.set_task_pinned(task_id, pinned))
@@ -433,6 +454,9 @@ pub fn run() {
             task_pin,
             task_archive,
             task_diff,
+            file_read,
+            file_write,
+            files_list,
             logs_export,
             task_set_status
         ])
