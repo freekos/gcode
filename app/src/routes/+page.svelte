@@ -785,9 +785,12 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding-right: 10px;
+    padding-right: 12px;
   }
-  .upd-wrap { position: relative; }
+  /* the traffic lights sit at (26,26): their visual center is ~32px from the
+     window top — nudge the pill so both share one axis */
+  .upd-wrap { margin-top: -3px; }
+  .upd-wrap { position: relative; display: inline-flex; align-items: center; }
   .upd-btn {
     background: oklch(62% 0.14 150);
     color: oklch(15% 0.03 150);
