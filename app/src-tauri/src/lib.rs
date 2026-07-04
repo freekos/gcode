@@ -1,14 +1,177 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+//! Tauri bridge over gcode-core: thin DTO commands + realtime events.
+//! All state access goes through the core's single-writer actor — the UI never
+//! touches SQLite or git directly.
+
+use gcode_core::{provision, scan, KeyedQueues, State, StateHandle, TaskStatus};
+use serde::Serialize;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State as TState};
+
+struct App {
+    handle: StateHandle,
+    queues: Arc<KeyedQueues>,
+}
+
+#[derive(Serialize, Clone)]
+struct ProjectDto {
+    id: i64,
+    name: String,
+    path: String,
+    repos: usize,
+}
+
+#[derive(Serialize, Clone)]
+struct TaskDto {
+    id: i64,
+    title: String,
+    slug: String,
+    branch: String,
+    status: String,
+    archived: bool,
+}
+
+fn err_s(e: impl std::fmt::Display) -> String {
+    e.to_string()
+}
+
+/// State DB location: $GCODE_DB or ~/.gcode/gcode.db (same as the CLI —
+/// the app and the CLI see the same world).
+fn db_path() -> PathBuf {
+    if let Ok(p) = std::env::var("GCODE_DB") {
+        return PathBuf::from(p);
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".gcode").join("gcode.db")
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn projects_list(app: TState<'_, App>) -> Result<Vec<ProjectDto>, String> {
+    app.handle
+        .call(|st| -> gcode_core::Result<Vec<ProjectDto>> {
+            let mut out = vec![];
+            for p in st.list_projects()? {
+                let repos = st.project_repos(p.id)?.len();
+                out.push(ProjectDto {
+                    id: p.id,
+                    name: p.name,
+                    path: p.path,
+                    repos,
+                });
+            }
+            Ok(out)
+        })
+        .map_err(err_s)
+}
+
+#[tauri::command]
+fn project_add(app: TState<'_, App>, path: String) -> Result<ProjectDto, String> {
+    let abs = std::fs::canonicalize(&path).map_err(|e| format!("bad path {path}: {e}"))?;
+    let name = abs
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".into());
+    let repos = scan::discover_repos(&abs).map_err(err_s)?;
+    if repos.is_empty() {
+        return Err(format!("no git repositories found in {}", abs.display()));
+    }
+    let n = repos.len();
+    let abs_s = abs.to_string_lossy().to_string();
+    app.handle
+        .call(move |st| st.add_project(&name, &abs_s, &repos))
+        .map(|p| ProjectDto {
+            id: p.id,
+            name: p.name,
+            path: p.path,
+            repos: n,
+        })
+        .map_err(err_s)
+}
+
+#[tauri::command]
+fn tasks_list(app: TState<'_, App>, project_id: i64) -> Result<Vec<TaskDto>, String> {
+    app.handle
+        .call(move |st| st.list_tasks(project_id, false))
+        .map(|tasks| {
+            tasks
+                .into_iter()
+                .map(|t| TaskDto {
+                    id: t.id,
+                    title: t.title,
+                    slug: t.slug,
+                    branch: t.branch,
+                    status: t.status.as_str().to_string(),
+                    archived: t.archived_at.is_some(),
+                })
+                .collect()
+        })
+        .map_err(err_s)
+}
+
+/// Create a task from a prompt (the human never names tasks — ui-inventory §6).
+/// Provisioning runs in a background thread; "tasks-changed" fires when done.
+#[tauri::command]
+fn task_create(
+    app_handle: AppHandle,
+    app: TState<'_, App>,
+    project_id: i64,
+    prompt: String,
+) -> Result<(), String> {
+    let project = app
+        .handle
+        .call(move |st| -> gcode_core::Result<_> {
+            let projects = st.list_projects()?;
+            projects
+                .into_iter()
+                .find(|p| p.id == project_id)
+                .ok_or_else(|| gcode_core::CoreError::NotFound(format!("project #{project_id}")))
+        })
+        .map_err(err_s)?;
+
+    let handle = app.handle.clone();
+    let queues = app.queues.clone();
+    std::thread::spawn(move || {
+        let res = provision::provision_task(&handle, &queues, &project.name, &prompt, &[]);
+        let payload = match &res {
+            Ok(r) => serde_json::json!({ "ok": true, "slug": r.task.slug }),
+            Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }),
+        };
+        let _ = app_handle.emit("tasks-changed", payload);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn task_set_status(app: TState<'_, App>, task_id: i64, status: String) -> Result<(), String> {
+    let st = TaskStatus::parse(&status).ok_or_else(|| format!("unknown status {status}"))?;
+    app.handle
+        .call(move |s| s.set_task_status(task_id, st))
+        .map_err(err_s)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let path = db_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let state = State::open(&path).expect("cannot open gcode state db");
+    let app = App {
+        handle: StateHandle::spawn(state),
+        queues: Arc::new(KeyedQueues::new()),
+    };
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .manage(app)
+        .invoke_handler(tauri::generate_handler![
+            projects_list,
+            project_add,
+            tasks_list,
+            task_create,
+            task_set_status
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

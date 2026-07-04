@@ -108,29 +108,86 @@ pub struct TaskRepo {
 }
 
 /// Derive a filesystem/branch-safe slug from a human title.
-/// Lowercase ASCII letters/digits/dashes only, max 40 chars, never empty.
+/// Cyrillic is transliterated (prompts are often Russian — "почини логин" must
+/// give a meaningful slug, not a fallback). Lowercase ASCII letters/digits/dashes,
+/// max 40 chars, never empty.
 pub fn slugify(title: &str) -> String {
     let mut out = String::new();
     let mut prev_dash = false;
+    let push = |s: &str, out: &mut String, prev_dash: &mut bool| {
+        for c in s.chars() {
+            out.push(c);
+        }
+        *prev_dash = false;
+    };
     for ch in title.chars() {
+        if out.len() >= 40 {
+            break;
+        }
         let c = ch.to_ascii_lowercase();
         if c.is_ascii_alphanumeric() {
             out.push(c);
             prev_dash = false;
+        } else if let Some(tr) = translit(ch.to_lowercase().next().unwrap_or(ch)) {
+            push(tr, &mut out, &mut prev_dash);
         } else if !prev_dash && !out.is_empty() {
             out.push('-');
             prev_dash = true;
-        }
-        if out.len() >= 40 {
-            break;
         }
     }
     let trimmed = out.trim_matches('-').to_string();
     if trimmed.is_empty() {
         "task".to_string()
     } else {
-        trimmed
+        trimmed.chars().take(40).collect()
     }
+}
+
+/// RU -> latin, GOST-style simplified.
+fn translit(c: char) -> Option<&'static str> {
+    Some(match c {
+        'а' => "a",
+        'б' => "b",
+        'в' => "v",
+        'г' => "g",
+        'д' => "d",
+        'е' | 'ё' => "e",
+        'ж' => "zh",
+        'з' => "z",
+        'и' => "i",
+        'й' => "y",
+        'к' => "k",
+        'л' => "l",
+        'м' => "m",
+        'н' => "n",
+        'о' => "o",
+        'п' => "p",
+        'р' => "r",
+        'с' => "s",
+        'т' => "t",
+        'у' => "u",
+        'ф' => "f",
+        'х' => "h",
+        'ц' => "ts",
+        'ч' => "ch",
+        'ш' => "sh",
+        'щ' => "sch",
+        'ы' => "y",
+        'э' => "e",
+        'ю' => "yu",
+        'я' => "ya",
+        'ъ' | 'ь' => "",
+        // Kazakh specifics
+        'қ' => "k",
+        'ғ' => "g",
+        'ң' => "n",
+        'ү' | 'ұ' => "u",
+        'ө' => "o",
+        'һ' => "h",
+        'і' => "i",
+        'ә' => "a",
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
@@ -143,14 +200,25 @@ mod tests {
     }
 
     #[test]
-    fn slugify_cyrillic_falls_back() {
-        // non-ASCII is dropped; an all-cyrillic title must still produce a usable slug
-        assert_eq!(slugify("починить логин"), "task");
+    fn slugify_cyrillic_transliterates() {
+        assert_eq!(slugify("почини логин"), "pochini-login");
+        assert_eq!(
+            slugify("Почини редирект после логина"),
+            "pochini-redirekt-posle-logina"
+        );
     }
 
     #[test]
-    fn slugify_mixed_keeps_ascii() {
-        assert_eq!(slugify("починить login redirect"), "login-redirect");
+    fn slugify_mixed_keeps_ascii_and_translit() {
+        assert_eq!(
+            slugify("починить login redirect"),
+            "pochinit-login-redirect"
+        );
+    }
+
+    #[test]
+    fn slugify_emoji_only_falls_back() {
+        assert_eq!(slugify("🔥🔥🔥"), "task");
     }
 
     #[test]
