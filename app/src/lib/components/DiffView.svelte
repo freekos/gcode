@@ -5,28 +5,33 @@
   import type { DiffFile } from "$lib/api";
 
   // Unified diff with line selection -> batched comments (GitHub-review style).
+  // Renders one or MANY repos (grouped sections) — comments carry their repo.
   export interface PendingComment {
+    repo: string;
     file: string;
     from: number;
     to: number;
     code: string;
     text: string;
   }
+  export interface DiffGroup {
+    repo: string;
+    files: DiffFile[];
+  }
 
   let {
-    files,
-    repo,
+    groups,
     onsend,
   }: {
-    files: DiffFile[];
-    repo: string;
+    groups: DiffGroup[];
     onsend: (comments: PendingComment[]) => void;
   } = $props();
 
   let collapsedFiles: Record<string, boolean> = $state({});
   let pending: PendingComment[] = $state([]);
 
-  // selection state: file + line range (new-side numbers where possible)
+  // selection state: repo+file + line range (new-side numbers where possible)
+  let selRepo: string | null = $state(null);
   let selFile: string | null = $state(null);
   let selFrom: number | null = $state(null);
   let selTo: number | null = $state(null);
@@ -37,27 +42,29 @@
     return l.new_no ?? l.old_no;
   }
 
-  function clickLine(file: string, no: number | null, e: MouseEvent) {
+  function clickLine(repo: string, file: string, no: number | null, e: MouseEvent) {
     if (no === null) return;
-    if (e.shiftKey && selFile === file && selFrom !== null) {
+    if (e.shiftKey && selRepo === repo && selFile === file && selFrom !== null) {
       selTo = no;
       if (selTo < selFrom) [selFrom, selTo] = [selTo, selFrom];
     } else {
+      selRepo = repo;
       selFile = file;
       selFrom = no;
       selTo = no;
     }
-    composerAt = file;
+    composerAt = `${repo}\u0000${file}`;
   }
 
-  function inSelection(file: string, no: number | null): boolean {
+  function inSelection(repo: string, file: string, no: number | null): boolean {
     return (
-      selFile === file && no !== null && selFrom !== null && selTo !== null && no >= selFrom && no <= selTo
+      selRepo === repo && selFile === file && no !== null && selFrom !== null && selTo !== null && no >= selFrom && no <= selTo
     );
   }
 
   function selectedCode(): string {
-    const f = files.find((x) => x.path === selFile);
+    const g = groups.find((x) => x.repo === selRepo);
+    const f = g?.files.find((x) => x.path === selFile);
     if (!f || selFrom === null || selTo === null) return "";
     const out: string[] = [];
     for (const h of f.hunks) {
@@ -72,15 +79,13 @@
   }
 
   function addComment() {
-    if (!selFile || selFrom === null || selTo === null || !commentText.trim()) return;
+    if (!selRepo || !selFile || selFrom === null || selTo === null || !commentText.trim()) return;
     pending = [
       ...pending,
-      { file: selFile, from: selFrom, to: selTo, code: selectedCode(), text: commentText.trim() },
+      { repo: selRepo, file: selFile, from: selFrom, to: selTo, code: selectedCode(), text: commentText.trim() },
     ];
     commentText = "";
-    composerAt = null;
-    selFile = null;
-    selFrom = selTo = null;
+    clearSel();
   }
 
   function sendAll() {
@@ -90,6 +95,7 @@
   }
   function clearSel() {
     composerAt = null;
+    selRepo = null;
     selFile = null;
     selFrom = selTo = null;
     commentText = "";
@@ -103,10 +109,14 @@
 />
 
 <div class="diffwrap">
-  {#if files.length === 0}
-    <p class="empty">Изменений в <span class="mono">{repo}</span> пока нет.</p>
+  {#if groups.every((g) => g.files.length === 0)}
+    <p class="empty">Изменений пока нет.</p>
   {:else}
-    {#each files as f (f.path)}
+    {#each groups as g (g.repo)}
+    {#if groups.length > 1}
+      <div class="repo-sec mono">{g.repo}</div>
+    {/if}
+    {#each g.files as f (f.path)}
       <div class="dfile">
         <button class="dhead" onclick={() => (collapsedFiles[f.path] = !collapsedFiles[f.path])}>
           <span class="chev">{collapsedFiles[f.path] ? "▸" : "▾"}</span>
@@ -122,10 +132,10 @@
               {#each h.lines as l, li (li)}
                 <div
                   class="dl {l.kind}"
-                  class:sel={inSelection(f.path, lineNo(l))}
+                  class:sel={inSelection(g.repo, f.path, lineNo(l))}
                   role="button"
                   tabindex="-1"
-                  onclick={(e) => clickLine(f.path, lineNo(l), e)}
+                  onclick={(e) => clickLine(g.repo, f.path, lineNo(l), e)}
                   onkeydown={() => {}}
                 >
                   <span class="plus" aria-hidden="true">+</span>
@@ -137,9 +147,9 @@
               {/each}
             {/each}
           </div>
-          {#if composerAt === f.path && selFrom !== null}
+          {#if composerAt === `${g.repo}\u0000${f.path}` && selFrom !== null}
             <div class="cbox">
-              <div class="crange mono">{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · shift+клик — диапазон · Esc — отмена</div>
+              <div class="crange mono">{g.repo}/{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · shift+клик — диапазон · Esc — отмена</div>
               <div class="cpreview mono">
                 {#each selectedCode().split("\n").slice(0, 4) as pl, pi (pi)}
                   <div class:p-add={pl.startsWith("+")} class:p-del={pl.startsWith("-")}>{pl}</div>
@@ -167,13 +177,14 @@
         {/if}
       </div>
     {/each}
+    {/each}
   {/if}
 
   {#if pending.length}
     <div class="batch glass-rim">
       <span><b>{pending.length}</b> комм. в пачке</span>
       {#each pending as c, i (i)}
-        <span class="chip mono" data-tip={c.text} aria-label={c.text}>{c.file.split("/").pop()}:{c.from}{c.to !== c.from ? `–${c.to}` : ""}
+        <span class="chip mono" data-tip={c.text} aria-label={c.text}>{c.repo}/{c.file.split("/").pop()}:{c.from}{c.to !== c.from ? `–${c.to}` : ""}
           <button class="x" aria-label="Убрать" onclick={() => (pending = pending.filter((_, j) => j !== i))}>×</button>
         </span>
       {/each}
@@ -187,6 +198,12 @@
 <style>
   .diffwrap { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 90px; overflow-y: auto; flex: 1; }
   .empty { color: var(--text-muted); }
+  .repo-sec {
+    font-size: 12px;
+    color: var(--text-primary);
+    font-weight: 600;
+    padding: 4px 2px 0;
+  }
   .mono { font-family: var(--font-mono); font-size: 11.5px; }
   .dfile { border-radius: var(--r-lg); background: var(--surface-1); overflow: hidden; }
   .dhead {

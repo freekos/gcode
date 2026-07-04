@@ -19,7 +19,6 @@
     taskContext,
     threadHistory,
     taskDiff,
-    type DiffFile,
     projectAdd,
     pickFolder,
     revealProject,
@@ -34,7 +33,7 @@
     ago,
   } from "$lib/api";
   import DiffStat from "$lib/components/DiffStat.svelte";
-  import DiffView, { type PendingComment } from "$lib/components/DiffView.svelte";
+  import DiffView, { type PendingComment, type DiffGroup } from "$lib/components/DiffView.svelte";
   import { autogrow } from "$lib/actions";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn"; text: string };
@@ -103,16 +102,18 @@
   let updOpen = $state(false);
   let helpOpen = $state(false);
   let diffOpen = $state(false);
-  let diffRepo: string | null = $state(null);
-  let diffFiles: DiffFile[] = $state([]);
+  let diffRepo: string | null = $state(null); // null = все репо
+  let diffGroups: DiffGroup[] = $state([]);
 
-  async function openDiff(repo?: string) {
+  async function openDiff(repo?: string | null) {
     if (!selected) return;
-    const r = repo ?? diffRepo ?? ctx?.touched[0]?.repo;
-    if (!r) return;
-    diffRepo = r;
+    diffRepo = repo ?? null;
     diffOpen = true;
-    diffFiles = await taskDiff(selected.id, r);
+    const repos = diffRepo ? [diffRepo] : (ctx?.touched.map((r) => r.repo) ?? []);
+    const sel = selected;
+    diffGroups = await Promise.all(
+      repos.map(async (r) => ({ repo: r, files: await taskDiff(sel.id, r) })),
+    );
   }
 
   function sendReview(comments: PendingComment[]) {
@@ -120,7 +121,7 @@
     const fence = "```";
     const parts = comments.map(
       (c) =>
-        `**${diffRepo}/${c.file}:${c.from}${c.to !== c.from ? `–${c.to}` : ""}**\n${fence}\n${c.code}\n${fence}\n${c.text}`,
+        `**${c.repo}/${c.file}:${c.from}${c.to !== c.from ? `–${c.to}` : ""}**\n${fence}\n${c.code}\n${fence}\n${c.text}`,
     );
     const msg = `Ревью изменений (${comments.length} комм.):\n\n${parts.join("\n\n")}\n\nПоправь по комментариям.`;
     diffOpen = false;
@@ -765,6 +766,7 @@
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="dp-head">
         <div class="dp-chips">
+          <button class="repo-chip" class:on={diffRepo === null} onclick={() => openDiff(null)}>Все</button>
           {#if ctx}
             {#each ctx.touched as r (r.repo)}
               <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
@@ -775,7 +777,7 @@
         </div>
         <button class="iconbtn" data-tip="Закрыть · ⌘D" aria-label="Закрыть дифф" onclick={() => (diffOpen = false)}>✕</button>
       </div>
-      <DiffView files={diffFiles} repo={diffRepo ?? ""} onsend={sendReview} />
+      <DiffView groups={diffGroups} onsend={sendReview} />
     </aside>
   {:else if selected}
     <aside class="ctx">
