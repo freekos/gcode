@@ -48,6 +48,9 @@ fn setup() -> (StateHandle, KeyedQueues, tempfile::TempDir) {
     // a secret that must follow the worktree + a tracked example that must NOT
     std::fs::write(server.join(".env"), "SECRET=1\n").unwrap();
     std::fs::write(server.join(".env.example"), "SECRET=\n").unwrap();
+    // deps dir cloned in background by provisioning
+    std::fs::create_dir_all(server.join("node_modules/somelib")).unwrap();
+    std::fs::write(server.join("node_modules/somelib/index.js"), "x\n").unwrap();
 
     let repos = scan::discover_repos(tmp.path()).unwrap();
     let mut st = State::in_memory().unwrap();
@@ -77,6 +80,14 @@ fn provisions_worktree_per_repo_with_branch_env_and_context() {
     // .env copied, .env.example NOT copied
     assert!(root.join("server").join(".env").exists());
     assert!(!root.join("server").join(".env.example").exists());
+    // node_modules clone happens in the BACKGROUND (off the critical path) — poll
+    let nm = root.join("server").join("node_modules").join("somelib");
+    for _ in 0..50 {
+        if nm.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     // context file at the root
     let task_md = std::fs::read_to_string(root.join("TASK.md")).unwrap();
     assert!(task_md.contains("Fix login flow"));

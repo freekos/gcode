@@ -94,52 +94,76 @@ pub fn provision_task_named(
     let task =
         handle.call(move |st| st.add_task(pid, &title_s, &slug_s, &branch_s, &repo_worktrees))?;
 
-    // 2. Provision worktrees, serialized per repo.
+    // 2. Provision worktrees — repos IN PARALLEL (per-repo queues still serialize
+    //    against other operations on the same repo). Fast path only: worktree from
+    //    the LOCAL ref (no network), .env copy. Fetch and node_modules cloning are
+    //    off the critical path (background, below) — review finding: sequential
+    //    provisioning with fetch+deps made task creation take tens of seconds.
+    let started = std::time::Instant::now();
+    let results: Vec<(String, PathBuf, Result<()>)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = selected
+            .iter()
+            .map(|repo| {
+                let wt = root.join(&repo.name);
+                let branch = branch.clone();
+                scope.spawn(move || {
+                    let repo_path = Path::new(&repo.path);
+                    let res = queues.with(&repo.path, || -> Result<()> {
+                        if let Some(parent) = wt.parent() {
+                            std::fs::create_dir_all(parent).map_err(|e| {
+                                CoreError::Invalid(format!("mkdir {}: {e}", parent.display()))
+                            })?;
+                        }
+                        // New branch from the LOCAL default ref; attach if the branch exists.
+                        // Fetch only as a fallback when the local ref is missing.
+                        let wt_s = wt.to_string_lossy().to_string();
+                        let add_new = git::run_git(
+                            repo_path,
+                            &[
+                                "worktree",
+                                "add",
+                                "-b",
+                                &branch,
+                                &wt_s,
+                                &repo.default_branch,
+                            ],
+                        );
+                        if add_new.is_err() {
+                            let attach =
+                                git::run_git(repo_path, &["worktree", "add", &wt_s, &branch]);
+                            if attach.is_err() {
+                                let _ = git::run_git(
+                                    repo_path,
+                                    &["fetch", "origin", &repo.default_branch],
+                                );
+                                git::run_git(
+                                    repo_path,
+                                    &[
+                                        "worktree",
+                                        "add",
+                                        "-b",
+                                        &branch,
+                                        &wt_s,
+                                        &repo.default_branch,
+                                    ],
+                                )?;
+                            }
+                        }
+                        copy_env_files(repo_path, &wt);
+                        Ok(())
+                    });
+                    (repo.name.clone(), wt, res)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
     let mut created: Vec<(String, PathBuf)> = vec![];
     let mut failure: Option<CoreError> = None;
-    for repo in &selected {
-        let wt = root.join(&repo.name);
-        let repo_path = Path::new(&repo.path);
-        let res = queues.with(&repo.path, || -> Result<()> {
-            if let Some(parent) = wt.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| CoreError::Invalid(format!("mkdir {}: {e}", parent.display())))?;
-            }
-            // Fetch only when the repo actually has a remote (local-only repos are fine).
-            if git::run_git(repo_path, &["remote"])
-                .map(|r| !r.is_empty())
-                .unwrap_or(false)
-            {
-                let _ = git::run_git(repo_path, &["fetch", "origin", &repo.default_branch]);
-            }
-            // New branch from the default branch; if the branch already exists, attach to it.
-            let add_new = git::run_git(
-                repo_path,
-                &[
-                    "worktree",
-                    "add",
-                    "-b",
-                    &branch,
-                    &wt.to_string_lossy(),
-                    &repo.default_branch,
-                ],
-            );
-            if add_new.is_err() {
-                git::run_git(
-                    repo_path,
-                    &["worktree", "add", &wt.to_string_lossy(), &branch],
-                )?;
-            }
-            copy_env_files(repo_path, &wt);
-            clone_node_modules(repo_path, &wt);
-            Ok(())
-        });
+    for (name, wt, res) in results {
         match res {
-            Ok(()) => created.push((repo.name.clone(), wt)),
-            Err(e) => {
-                failure = Some(e);
-                break;
-            }
+            Ok(()) => created.push((name, wt)),
+            Err(e) => failure = Some(failure.take().unwrap_or(e)),
         }
     }
 
@@ -180,6 +204,47 @@ pub fn provision_task_named(
         ),
     );
     write_agent_guardrails(&root, title, &repos_list);
+
+    // Heavy extras run in the BACKGROUND — the task is usable immediately:
+    // node_modules CoW clones + a freshness fetch per repo. Facts land in the journal.
+    let elapsed = started.elapsed();
+    {
+        let deps: Vec<(PathBuf, PathBuf)> = selected
+            .iter()
+            .filter_map(|r| {
+                created
+                    .iter()
+                    .find(|(n, _)| n == &r.name)
+                    .map(|(_, wt)| (PathBuf::from(&r.path), wt.clone()))
+            })
+            .collect();
+        let handle_bg = handle.clone();
+        let slug_bg = slug.clone();
+        std::thread::spawn(move || {
+            let t0 = std::time::Instant::now();
+            for (repo_path, wt) in &deps {
+                clone_node_modules(repo_path, wt);
+                let _ = git::run_git(repo_path, &["fetch", "origin", "--quiet"]);
+            }
+            let detail = format!(
+                "deps+fetch for {} repo(s) in {:.1}s",
+                deps.len(),
+                t0.elapsed().as_secs_f32()
+            );
+            handle_bg.call(move |st| {
+                let _ = st.journal_append("task.deps_ready", Some(&slug_bg), Some(&detail));
+            });
+        });
+    }
+    let slug_j = slug.clone();
+    let detail = format!(
+        "{} worktree(s) in {:.2}s; deps in background",
+        created.len(),
+        elapsed.as_secs_f32()
+    );
+    handle.call(move |st| {
+        let _ = st.journal_append("task.provisioned", Some(&slug_j), Some(&detail));
+    });
 
     Ok(ProvisionResult {
         task,

@@ -73,21 +73,32 @@ export async function taskCreate(projectId: number, prompt: string): Promise<voi
       { id: demoId++, title: prompt, slug, branch: slug, status: "new", archived: false },
       ...(demoTaskSets[projectId] ?? []),
     ];
-    setTimeout(() => window.dispatchEvent(new CustomEvent("demo-tasks-changed")), 400);
+    setTimeout(
+      () => window.dispatchEvent(new CustomEvent("demo-tasks-changed", { detail: { ok: true, slug } })),
+      400,
+    );
     return;
   }
   return invoke<void>("task_create", { projectId, prompt });
 }
 
+export interface TasksChangedPayload {
+  ok?: boolean;
+  slug?: string;
+  error?: string;
+}
+
 /** Subscribe to "tasks changed" from the core; returns unsubscribe. */
-export async function onTasksChanged(cb: () => void): Promise<() => void> {
+export async function onTasksChanged(
+  cb: (payload?: TasksChangedPayload) => void,
+): Promise<() => void> {
   if (!inTauri) {
-    const h = () => cb();
+    const h = (e: Event) => cb((e as CustomEvent<TasksChangedPayload>).detail);
     window.addEventListener("demo-tasks-changed", h);
     return () => window.removeEventListener("demo-tasks-changed", h);
   }
   const { listen } = await import("@tauri-apps/api/event");
-  const un = await listen("tasks-changed", () => cb());
+  const un = await listen<TasksChangedPayload>("tasks-changed", (ev) => cb(ev.payload));
   return un;
 }
 

@@ -40,6 +40,7 @@
   let createOpen = $state(false);
   let prompt = $state("");
   let creating = $state(false);
+  let pendingPrompt: string | null = $state(null);
 
   // per-task thread view state (history persistence comes later — engine owns transcripts)
   let threads: Record<number, ThreadState> = $state({});
@@ -149,9 +150,19 @@
     reload();
     let un: (() => void) | undefined;
     let unThread: (() => void) | undefined;
-    onTasksChanged(() => {
+    onTasksChanged(async (payload) => {
       creating = false;
-      reload();
+      await reload();
+      // the creation prompt IS the first agent message (review comment #2)
+      if (pendingPrompt && payload?.ok && payload?.slug) {
+        const node = tree.find((n) => n.tasks.some((t) => t.slug === payload.slug));
+        const t = node?.tasks.find((t) => t.slug === payload.slug);
+        if (t && node) {
+          pick(t, node.project);
+          fire(t.id, pendingPrompt);
+        }
+        pendingPrompt = null;
+      }
     }).then((u) => (un = u));
     onThreadEvent(onEvent).then((u) => (unThread = u));
 
@@ -186,6 +197,7 @@
   async function submitCreate() {
     if (!project || !prompt.trim()) return;
     creating = true;
+    pendingPrompt = prompt.trim();
     await taskCreate(project.id, prompt.trim());
     prompt = "";
     localStorage.removeItem("gcode.draft.newtask");

@@ -262,6 +262,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            // debug builds: open the inspector so runtime JS errors are visible
+            #[cfg(debug_assertions)]
+            {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("main") {
+                    w.open_devtools();
+                }
+            }
+            Ok(())
+        })
         .manage(app)
         .invoke_handler(tauri::generate_handler![
             projects_list,

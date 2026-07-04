@@ -17,6 +17,7 @@
 
 <div class="wrap">
   <header>
+    <a class="back" href="/">← назад</a>
     <span class="logo">g<b>code</b></span>
     <span class="note">styleguide — живая витрина токенов и компонентов</span>
   </header>
@@ -111,6 +112,8 @@
 <style>
   .wrap { max-width: 900px; margin: 0 auto; padding: 24px 24px 96px; }
   header { display: flex; align-items: baseline; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border-subtle); }
+  .back { color: var(--text-secondary); text-decoration: none; font-size: 12.5px; }
+  .back:hover { color: var(--text-primary); }
   .logo { font-family: var(--font-mono); font-weight: 700; font-size: 16px; }
   .logo b { color: var(--accent); }
   .note { color: var(--text-muted); font-size: 12px; }
