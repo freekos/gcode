@@ -499,6 +499,7 @@
   </aside>
 
   <div class="card glass-rim">
+    <div class="card-drag" data-tauri-drag-region></div>
     <div class="card-actions">
       <button class="iconbtn" data-tip={selected ? "Открыть задачу в Finder" : "Открыть проект в Finder"} aria-label="Открыть в Finder" onclick={revealCurrent}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
@@ -753,6 +754,15 @@
     z-index: 30;
     display: inline-flex;
     gap: 4px;
+  }
+  /* drag the window by the card's top band (buttons sit above at z30) */
+  .card-drag {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 44px;
+    z-index: 20;
   }
   .help-wrap { position: relative; }
   .help-menu { top: 30px; right: 0; left: auto; min-width: 210px; }
@@ -1064,7 +1074,6 @@
     cursor: col-resize;
     z-index: 20;
   }
-  .sb-resize:hover { background: var(--border-strong); }
   .demo {
     font-family: var(--font-mono);
     font-size: 10px;
