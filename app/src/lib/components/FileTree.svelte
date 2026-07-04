@@ -7,16 +7,23 @@
     lister,
     rel = "",
     depth = 0,
+    active = null,
     onopen,
   }: {
     lister: (rel: string) => Promise<DirEntry[]>;
     rel?: string;
     depth?: number;
+    /** full rel path of the open file — its ancestors auto-expand, itself highlights */
+    active?: string | null;
     onopen: (rel: string) => void;
   } = $props();
 
   let entries: DirEntry[] | null = $state(null);
   let expanded: Record<string, boolean> = $state({});
+
+  function isOpen(name: string, childRel: string): boolean {
+    return expanded[name] ?? (active !== null && active.startsWith(childRel + "/"));
+  }
 
   $effect(() => {
     lister(rel).then((e) => (entries = e));
@@ -32,17 +39,17 @@
       <button
         class="ft-row"
         style="padding-left:{depth * 14 + 8}px"
-        onclick={() => (expanded[e.name] = !expanded[e.name])}
+        onclick={() => (expanded[e.name] = !isOpen(e.name, childRel))}
       >
-        <span class="chev">{expanded[e.name] ? "▾" : "▸"}</span>
-        <span class="nm">{e.name}</span>
+        <span class="chev">{isOpen(e.name, childRel) ? "▾" : "▸"}</span>
+        <span class="nm" class:onpath={active !== null && active.startsWith(childRel + "/")}>{e.name}</span>
         {#if e.branch}<span class="br">{e.branch}</span>{/if}
       </button>
-      {#if expanded[e.name]}
-        <FileTree {lister} rel={childRel} depth={depth + 1} {onopen} />
+      {#if isOpen(e.name, childRel)}
+        <FileTree {lister} rel={childRel} depth={depth + 1} {active} {onopen} />
       {/if}
     {:else}
-      <button class="ft-row" style="padding-left:{depth * 14 + 22}px" onclick={() => onopen(childRel)}>
+      <button class="ft-row" class:cur={active === childRel} style="padding-left:{depth * 14 + 22}px" onclick={() => onopen(childRel)}>
         <span class="nm file">{e.name}</span>
       </button>
     {/if}
@@ -65,6 +72,8 @@
     text-align: left;
   }
   .ft-row:hover { background: var(--surface-2); color: var(--text-primary); }
+  .ft-row.cur { background: var(--accent-soft); color: var(--text-primary); }
+  .nm.onpath { color: var(--text-primary); }
   .chev { font-size: 9px; color: var(--text-muted); width: 10px; flex: none; }
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nm.file { color: var(--text-secondary); }

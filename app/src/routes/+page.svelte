@@ -633,10 +633,18 @@
       <div class="ft-wrap">
         {#if filesScope === "task" && selected}
           {#key selected.id}
-            <FileTree lister={(rel) => taskDirList(selected!.id, rel)} onopen={(rel) => { const [r, ...rest] = rel.split("/"); openEditor(r, rest.join("/")); }} />
+            <FileTree
+              lister={(rel) => taskDirList(selected!.id, rel)}
+              active={editorOpen && editorScope === "task" ? `${editorRepo}/${editorPath}` : null}
+              onopen={(rel) => { const [r, ...rest] = rel.split("/"); openEditor(r, rest.join("/")); }}
+            />
           {/key}
         {:else if filesProject}
-          <FileTree lister={(rel) => projectDirList(filesProject!.id, rel)} onopen={openProjectFile} />
+          <FileTree
+            lister={(rel) => projectDirList(filesProject!.id, rel)}
+            active={editorOpen && editorScope === "project" ? editorPath : null}
+            onopen={openProjectFile}
+          />
         {/if}
       </div>
     {:else}
