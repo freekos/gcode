@@ -378,6 +378,30 @@ fn files_list(app: TState<'_, App>, task_id: i64) -> Result<Vec<String>, String>
 }
 
 #[tauri::command]
+fn project_dir_list(
+    app: TState<'_, App>,
+    project_id: i64,
+    rel: String,
+) -> Result<Vec<gcode_core::files::DirEntry>, String> {
+    gcode_core::files::project_list_dir(&app.handle, project_id, &rel).map_err(err_s)
+}
+
+#[tauri::command]
+fn project_file_read(app: TState<'_, App>, project_id: i64, rel: String) -> Result<String, String> {
+    gcode_core::files::project_read_file(&app.handle, project_id, &rel).map_err(err_s)
+}
+
+#[tauri::command]
+fn project_file_write(
+    app: TState<'_, App>,
+    project_id: i64,
+    rel: String,
+    content: String,
+) -> Result<(), String> {
+    gcode_core::files::project_write_file(&app.handle, project_id, &rel, &content).map_err(err_s)
+}
+
+#[tauri::command]
 fn task_pin(app: TState<'_, App>, task_id: i64, pinned: bool) -> Result<(), String> {
     app.handle
         .call(move |st| st.set_task_pinned(task_id, pinned))
@@ -457,6 +481,9 @@ pub fn run() {
             file_read,
             file_write,
             files_list,
+            project_dir_list,
+            project_file_read,
+            project_file_write,
             logs_export,
             task_set_status
         ])

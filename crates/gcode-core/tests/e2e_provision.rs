@@ -324,3 +324,32 @@ fn editor_roundtrip_read_write_list() {
     // escapes rejected
     assert!(read_file(&h, id, "server", "../outside.txt").is_err());
 }
+
+#[test]
+fn project_tree_shows_branch_badges_and_edits() {
+    use gcode_core::files::{project_list_dir, project_read_file, project_write_file};
+    let (h, _q, _tmp) = setup();
+    let projects = h.call(|st| st.list_projects()).unwrap();
+    let pid = projects[0].id;
+
+    let rootlist = project_list_dir(&h, pid, "").unwrap();
+    let server = rootlist
+        .iter()
+        .find(|e| e.name == "server")
+        .expect("server repo");
+    assert!(server.is_dir);
+    assert!(
+        server.branch.is_some(),
+        "repo dir shows its checked-out branch"
+    );
+
+    let readme = project_read_file(&h, pid, "server/README.md").unwrap();
+    assert!(!readme.is_empty());
+    project_write_file(&h, pid, "server/NOTES.md", "заметка\n").unwrap();
+    assert_eq!(
+        project_read_file(&h, pid, "server/NOTES.md").unwrap(),
+        "заметка\n"
+    );
+    // escapes rejected
+    assert!(project_read_file(&h, pid, "../evil").is_err());
+}

@@ -347,4 +347,34 @@ export async function filesList(taskId: number): Promise<string[]> {
   return invoke<string[]>("files_list", { taskId });
 }
 
+export interface DirEntry { name: string; is_dir: boolean; branch: string | null; }
+
+export async function projectDirList(projectId: number, rel: string): Promise<DirEntry[]> {
+  if (!inTauri) {
+    if (rel === "") return [
+      { name: "server", is_dir: true, branch: "main" },
+      { name: "crm", is_dir: true, branch: "develop" },
+      { name: "docs", is_dir: true, branch: null },
+      { name: "README.md", is_dir: false, branch: null },
+    ];
+    if (rel === "server") return [
+      { name: "src", is_dir: true, branch: null },
+      { name: "README.md", is_dir: false, branch: null },
+    ];
+    if (rel === "server/src") return [{ name: "auth.ts", is_dir: false, branch: null }];
+    return [];
+  }
+  return invoke<DirEntry[]>("project_dir_list", { projectId, rel });
+}
+
+export async function projectFileRead(projectId: number, rel: string): Promise<string> {
+  if (!inTauri) return `// demo project file ${rel}\n`;
+  return invoke<string>("project_file_read", { projectId, rel });
+}
+
+export async function projectFileWrite(projectId: number, rel: string, content: string): Promise<void> {
+  if (!inTauri) return;
+  return invoke<void>("project_file_write", { projectId, rel, content });
+}
+
 export const isDemo = !inTauri;

@@ -22,6 +22,8 @@
     fileRead,
     fileWrite,
     filesList,
+    projectFileRead,
+    projectFileWrite,
     projectAdd,
     pickFolder,
     revealProject,
@@ -39,6 +41,7 @@
   import DiffView, { type PendingComment, type DiffGroup } from "$lib/components/DiffView.svelte";
   import { autogrow } from "$lib/actions";
   import Editor from "$lib/components/Editor.svelte";
+  import FileTree from "$lib/components/FileTree.svelte";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review"; text: string };
   type ThreadState = {
@@ -112,6 +115,10 @@
   let editorRepo = $state("");
   let editorPath = $state("");
   let editorContent = $state("");
+  let editorScope: "task" | "project" = $state("task");
+  // sidebar "Show files" mode (ZCode-style): the tree shows the WORKING COPY
+  let sbMode: "tasks" | "files" = $state("tasks");
+  let filesProject: Project | undefined = $state();
   let filePaletteOpen = $state(false);
   let fileQ = $state("");
   let fileList: string[] = $state([]);
@@ -123,13 +130,32 @@
     } catch {
       editorContent = "";
     }
+    editorScope = "task";
     editorRepo = repo;
     editorPath = path;
     diffOpen = false;
     editorOpen = true;
   }
 
+  async function openProjectFile(rel: string) {
+    if (!filesProject) return;
+    try {
+      editorContent = await projectFileRead(filesProject.id, rel);
+    } catch {
+      editorContent = "";
+    }
+    editorScope = "project";
+    editorRepo = "";
+    editorPath = rel;
+    diffOpen = false;
+    editorOpen = true;
+  }
+
   function saveEditor(text: string) {
+    if (editorScope === "project") {
+      if (filesProject) projectFileWrite(filesProject.id, editorPath, text);
+      return;
+    }
     if (!selected) return;
     fileWrite(selected.id, editorRepo, editorPath, text);
   }
@@ -392,6 +418,8 @@
       }
       if (e.key === "Escape" && editorOpen && !filePaletteOpen) {
         editorOpen = false;
+      } else if (e.key === "Escape" && sbMode === "files" && !paletteOpen && !addProjOpen) {
+        sbMode = "tasks";
       }
       if (e.metaKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
@@ -523,7 +551,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout" class:with-ctx={!!selected} class:diff-wide={diffOpen || editorOpen} style="--sbw:{sbw}px; --ctxw:{ctxw}px; --diffw:{diffw}px">
+<div class="layout" class:with-ctx={!!selected || editorOpen} class:diff-wide={diffOpen || editorOpen} style="--sbw:{sbw}px; --ctxw:{ctxw}px; --diffw:{diffw}px">
   <aside>
     <div class="drag-strip" data-tauri-drag-region>
       {#if upd}
@@ -554,6 +582,25 @@
       {/if}
     </div>
 
+    {#if sbMode === "files" && filesProject}
+      <button class="newtask" onclick={() => (sbMode = "tasks")}>
+        <svg class="ic" viewBox="0 0 16 16"><path d="M9.5 3.5 5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        К задачам
+      </button>
+      <div class="sb-head">
+        <span class="seg">
+          <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+          {filesProject.name} · файлы
+        </span>
+        <span style="flex:1"></span>
+        <button class="iconbtn" data-tip="Открыть в Finder" aria-label="Открыть в Finder" onclick={() => filesProject && revealProject(filesProject.path)}>
+          <svg class="ic" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="ft-wrap">
+        <FileTree projectId={filesProject.id} onopen={openProjectFile} />
+      </div>
+    {:else}
     <button class="newtask" onclick={() => goHub()}>
       <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 5.2v5.6M5.2 8h5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
       Новая задача
@@ -622,8 +669,8 @@
               <button class="iconbtn sm" data-tip="Открыть папку" aria-label="Открыть папку" onclick={() => revealProject(node.project.path)}>
                 <svg class="ic" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>
               </button>
-              <button class="iconbtn sm" data-tip={collapsed[node.project.id] ? "Развернуть" : "Свернуть"} aria-label="Свернуть или развернуть" onclick={() => toggleProject(node.project.id)}>
-                <svg class="ic" viewBox="0 0 16 16"><path d="M3 4.5h10M5.5 8h7.5M8 11.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              <button class="iconbtn sm" data-tip="Показать файлы" aria-label="Показать файлы" onclick={() => { filesProject = node.project; sbMode = "files"; }}>
+                <svg class="ic" viewBox="0 0 16 16"><path d="M3 3.5h4M3 8h2.5M3 12.5h2.5M8 8h5M8 12.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M5.5 3.5v9" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/></svg>
               </button>
               <button class="iconbtn sm" data-tip="Новая задача" aria-label="Новая задача" onclick={() => goHub(node.project.id)}>
                 <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
@@ -658,6 +705,7 @@
           {/if}
         </div>
       {/each}
+    {/if}
     {/if}
     <div class="sb-bottom">
       <button class="user" data-tip="Вход через Google — скоро · v0.1" aria-label="Вход через Google — скоро · v0.1">
@@ -856,7 +904,7 @@
       </div>
     {/if}
   </main>
-  {#if selected && editorOpen}
+  {#if editorOpen}
     <aside class="ctx ctx-diff">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       {#key `${editorRepo}/${editorPath}`}
@@ -1101,6 +1149,7 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
+  .ft-wrap { overflow-y: auto; flex: 1; padding: 2px 4px; }
   .repo-chip {
     display: inline-flex; align-items: center; gap: 8px;
     background: var(--surface-1); border: 0; border-radius: 999px;
