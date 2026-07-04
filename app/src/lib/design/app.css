@@ -56,6 +56,42 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ZCode-style tooltips: dark pill, glass rim, 450ms delay. Use data-tip=""
+   instead of native title (native tooltips look OS-yellow and cheap). */
+[data-tip] {
+  position: relative;
+}
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 5px 11px;
+  font: 500 12px var(--font-ui);
+  color: var(--text-primary);
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow:
+    0 8px 24px oklch(0% 0 0 / 0.4),
+    inset 0 1px 0 var(--glass-highlight);
+  opacity: 0;
+  animation: gc-tip-in 120ms ease-out 450ms forwards;
+}
+[data-tip].tip-down:hover::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+@keyframes gc-tip-in {
+  to {
+    opacity: 1;
+  }
+}
+
 /* status pulse — visible from peripheral vision, gentle */
 @keyframes gc-pulse {
   0%,

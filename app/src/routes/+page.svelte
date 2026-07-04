@@ -345,12 +345,12 @@
         <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
         Проекты
       </span>
-      <button class="iconbtn" title="Добавить проект" onclick={addProject}>
+      <button class="iconbtn" data-tip="Добавить проект" aria-label="Добавить проект" onclick={addProject}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
       </button>
       <span style="flex:1"></span>
       <div class="viewmenu-wrap">
-        <button class="iconbtn" title="Вид и сортировка" onclick={() => (viewMenuOpen = !viewMenuOpen)}>
+        <button class="iconbtn" data-tip="Вид и сортировка" aria-label="Вид и сортировка" onclick={() => (viewMenuOpen = !viewMenuOpen)}>
           <svg class="ic" viewBox="0 0 16 16"><path d="M2.5 4.5h11M4.5 8h7M6.5 11.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         </button>
         {#if viewMenuOpen}
@@ -370,7 +370,7 @@
           </div>
         {/if}
       </div>
-      <button class="iconbtn" class:on={showArchived} title="Архивные задачи" onclick={() => { showArchived = !showArchived; reload(); }}>
+      <button class="iconbtn" class:on={showArchived} data-tip="Архивные задачи" aria-label="Архивные задачи" onclick={() => { showArchived = !showArchived; reload(); }}>
         <svg class="ic" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M3.2 6.4V12c0 .7.6 1.3 1.3 1.3h7c.7 0 1.3-.6 1.3-1.3V6.4M6.4 9h3.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>
       </button>
     </div>
@@ -390,13 +390,13 @@
               <span class="pmeta">{node.tasks.length}</span>
             </button>
             <span class="p-actions">
-              <button class="iconbtn sm" title="Открыть папку проекта" onclick={() => revealProject(node.project.path)}>
+              <button class="iconbtn sm" data-tip="Открыть папку" aria-label="Открыть папку" onclick={() => revealProject(node.project.path)}>
                 <svg class="ic" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>
               </button>
-              <button class="iconbtn sm" title={collapsed[node.project.id] ? "Развернуть" : "Свернуть"} onclick={() => toggleProject(node.project.id)}>
+              <button class="iconbtn sm" data-tip={collapsed[node.project.id] ? "Развернуть" : "Свернуть"} aria-label="Свернуть или развернуть" onclick={() => toggleProject(node.project.id)}>
                 <svg class="ic" viewBox="0 0 16 16"><path d="M3 4.5h10M5.5 8h7.5M8 11.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
               </button>
-              <button class="iconbtn sm" title="Новая задача в проекте" onclick={() => { project = node.project; createOpen = true; }}>
+              <button class="iconbtn sm" data-tip="Новая задача" aria-label="Новая задача" onclick={() => { project = node.project; createOpen = true; }}>
                 <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
               </button>
             </span>
@@ -418,16 +418,16 @@
       {/each}
     {/if}
     <div class="sb-bottom">
-      <button class="user" title="Вход через Google — скоро · gcode 0.1">
+      <button class="user" data-tip="Вход через Google — скоро · v0.1" aria-label="Вход через Google — скоро · v0.1">
         <span class="avatar">G</span>
         <span class="uname">Газиз</span>
         {#if isDemo}<span class="demo">demo</span>{/if}
       </button>
       <span style="flex:1"></span>
-      <button class="iconbtn" title="Remote-доступ с телефона (Telegram) — фаза 10">
+      <button class="iconbtn" data-tip="Remote с телефона — скоро" aria-label="Remote с телефона — скоро">
         <svg class="ic" viewBox="0 0 16 16"><rect x="4.6" y="1.8" width="6.8" height="12.4" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M7 12.4h2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
       </button>
-      <button class="iconbtn" title="Настройки · ⌘, (скоро)">
+      <button class="iconbtn" data-tip="Настройки · ⌘," aria-label="Настройки · ⌘,">
         <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 1.6v2.1M8 12.3v2.1M1.6 8h2.1M12.3 8h2.1M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5 11 5M5 11l-1.5 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
       </button>
     </div>
@@ -474,29 +474,39 @@
         {/if}
       </div>
       <div class="composer">
-        <textarea
-          bind:value={msg}
-          rows="2"
-          placeholder={cur.running ? "Агент работает — сообщение уйдёт следующим…" : "Сообщение агенту…"}
-          onkeydown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMsg();
-            }
-          }}
-        ></textarea>
-        <div class="c-bar">
-          {#if cur.running}
-            <span class="queue-note">◐ агент работает{cur.queue.length ? ` · в очереди: ${cur.queue.length}` : ""}</span>
-          {/if}
-          <span style="flex:1"></span>
-          <button class="send" onclick={sendMsg} title={cur.running ? "В очередь · ⏎" : "Отправить · ⏎"}>↑</button>
-        </div>
-        <div class="e-bar">
-          <span class="engine">◆ Claude</span>
-          {#if limit}
-            <span class="mut mono-s">↻ {limit.kind === "five_hour" ? "5h" : limit.kind} · сброс {fmtReset(limit.resetsAt)}</span>
-          {/if}
+        <div class="c-inner">
+          <textarea
+            bind:value={msg}
+            rows="2"
+            placeholder={cur.running ? "Агент работает — сообщение уйдёт следующим…" : "Сообщение агенту…"}
+            onkeydown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMsg();
+              }
+            }}
+          ></textarea>
+          <div class="c-row">
+            <button class="iconbtn" data-tip="Вложения — скоро" aria-label="Вложения — скоро">
+              <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+            <button class="perm" data-tip="Права агента: авто-правки кода, git запрещён технически" aria-label="Права агента">
+              <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 1.8 3 3.6v4.1c0 3 2.1 5.2 5 6.5 2.9-1.3 5-3.5 5-6.5V3.6z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+              Автопилот · без git
+              <span class="chev2">⌄</span>
+            </button>
+            {#if cur.running}
+              <span class="queue-note">◐ работает{cur.queue.length ? ` · очередь: ${cur.queue.length}` : ""}</span>
+            {/if}
+            <span style="flex:1"></span>
+            {#if limit}
+              <span class="mut mono-s" data-tip="Окно лимита подписки" aria-label="Лимит">↻ {limit.kind === "five_hour" ? "5h" : limit.kind} · {fmtReset(limit.resetsAt)}</span>
+            {/if}
+            <button class="engine-chip" data-tip="Движок треда" aria-label="Движок треда">◆ Claude <span class="chev2">⌄</span></button>
+            <button class="send" onclick={sendMsg} data-tip={cur.running ? "В очередь · ⏎" : "Отправить · ⏎"} aria-label="Отправить">
+              <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     {:else}
@@ -514,21 +524,33 @@
               <span class="chev2">⌄</span>
             </span>
           </div>
-          <textarea
-            bind:value={hubPrompt}
-            rows="3"
-            placeholder="Что сделать? Опиши задачу — имя, ветка и worktrees появятся сами"
-            onkeydown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submitHub();
-              }
-            }}
-          ></textarea>
-          <div class="hub-bar">
-            <span class="mut" style="font-size:11px">worktrees: все репо · git агенту запрещён</span>
-            <span style="flex:1"></span>
-            <button class="send" onclick={submitHub} title="Создать задачу · ⏎">↑</button>
+          <div class="c-inner">
+            <textarea
+              bind:value={hubPrompt}
+              rows="2"
+              placeholder="Что сделать? Опиши задачу — имя, ветка и worktrees появятся сами"
+              onkeydown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submitHub();
+                }
+              }}
+            ></textarea>
+            <div class="c-row">
+              <button class="iconbtn" data-tip="Вложения — скоро" aria-label="Вложения — скоро">
+                <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              </button>
+              <button class="perm" data-tip="Права агента: авто-правки кода, git запрещён технически" aria-label="Права агента">
+                <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 1.8 3 3.6v4.1c0 3 2.1 5.2 5 6.5 2.9-1.3 5-3.5 5-6.5V3.6z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+                Автопилот · без git
+                <span class="chev2">⌄</span>
+              </button>
+              <span style="flex:1"></span>
+              <button class="engine-chip" data-tip="Движок треда" aria-label="Движок треда">◆ Claude <span class="chev2">⌄</span></button>
+              <button class="send" onclick={submitHub} data-tip="Создать · ⏎" aria-label="Создать">
+                <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+              </button>
+            </div>
           </div>
         </div>
         <p class="mut" style="font-size:11px">или выбери задачу слева · <Kbd keys="⌘K" /> — всё остальное</p>
@@ -610,6 +632,7 @@
 <Modal bind:open={createOpen} width="560px">
   <h3>Новая задача{project ? ` · ${project.name}` : ""}</h3>
   <p class="mut" style="margin:0 0 12px">Опиши, что сделать — имя придумается само. Worktrees: все репо проекта.</p>
+  <div class="modal-body">
   <textarea
     bind:value={prompt}
     oninput={saveDraft}
@@ -619,6 +642,7 @@
       if (e.metaKey && e.key === "Enter") submitCreate();
     }}
   ></textarea>
+  </div>
   <div class="modal-bar">
     <span class="mut" style="font-size:11.5px">черновик сохраняется · ⌘⏎ — создать</span>
     <span style="flex:1"></span>
@@ -768,15 +792,49 @@
   }
   .hub-greet { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); margin: 0; }
   .hub-box {
-    width: min(640px, 100%);
+    width: min(660px, 100%);
     background: var(--surface-1);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--r-xl);
-    padding: 12px 14px;
+    border-radius: 18px;
+    padding: 8px;
   }
   :global(:root.native) .hub-box { background: var(--surface-2); }
   .hub-box { box-shadow: inset 0 1px 0 var(--glass-highlight); }
-  .hub-proj { margin-bottom: 6px; }
+  .hub-proj { margin: 4px 6px 8px; }
+  .c-inner {
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 10px 10px 8px;
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
+  .c-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .perm {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    color: var(--status-running);
+    font: 500 12.5px var(--font-ui);
+    padding: 4px 6px;
+    border-radius: var(--r-md);
+  }
+  .perm:hover { background: color-mix(in oklab, var(--status-running) 10%, transparent); }
+  .engine-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font: 500 12.5px var(--font-ui);
+    padding: 4px 8px;
+    border-radius: var(--r-md);
+  }
+  .engine-chip:hover { background: var(--surface-3); color: var(--text-primary); }
   .proj-chip {
     display: inline-flex;
     align-items: center;
@@ -800,7 +858,8 @@
   .proj-pick:focus-visible { outline: none; }
   .proj-chip:focus-within { border-color: var(--accent); }
   .chev2 { font-size: 10px; color: var(--text-muted); margin-top: -2px; }
-  .hub-box textarea {
+  .hub-box textarea,
+  .composer textarea {
     width: 100%;
     border: 0;
     background: transparent;
@@ -808,22 +867,23 @@
     color: var(--text-primary);
     font: 13.5px var(--font-ui);
     outline: none;
-    padding: 4px 2px;
+    padding: 2px;
   }
-  .hub-bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
   .send {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    border: 0;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-size: 15px;
-    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-3);
+    color: var(--text-primary);
     cursor: pointer;
-    transition: filter var(--t-fast) ease-out, transform var(--t-fast) ease-out;
+    transition: background var(--t-fast) ease-out, transform var(--t-fast) ease-out;
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
   }
-  .send:hover { filter: brightness(1.1); }
+  .send:hover { background: oklch(38% 0.006 280); }
   .send:active { transform: translateY(1px); }
   .send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .perr { color: var(--diff-del); font-size: 12px; margin: 6px 0 0; }
@@ -871,7 +931,8 @@
   .newtask:hover { background: var(--surface-2); color: var(--text-primary); }
   .hk-static { margin-left: auto; }
   .pnode { display: flex; flex-direction: column; margin-bottom: 4px; }
-  .phead-wrap { display: flex; align-items: center; position: relative; }
+  .phead-wrap { display: flex; align-items: center; position: relative; border-radius: var(--r-sm); }
+  .phead-wrap:hover { background: var(--surface-2); }
   .phead-wrap .phead { flex: 1; }
   .p-actions {
     position: absolute;
@@ -880,8 +941,6 @@
     gap: 1px;
     opacity: 0;
     transition: opacity var(--t-fast) ease-out;
-    background: var(--surface-2);
-    border-radius: var(--r-md);
   }
   .phead-wrap:hover .p-actions { opacity: 1; }
   .phead-wrap:hover .pmeta { opacity: 0; }
@@ -892,7 +951,7 @@
     padding: 5px 6px; border-radius: var(--r-sm);
     color: var(--text-primary); width: 100%;
   }
-  .phead:hover { background: var(--surface-2); }
+
   .chev {
     font-size: 9px; color: var(--text-muted); width: 12px;
     transition: transform var(--t-fast) ease-out;
@@ -924,7 +983,7 @@
   .mut { color: var(--text-muted); font-size: 12px; }
   .spin { font-size: 20px; animation: gc-spin 1s linear infinite; }
   @keyframes gc-spin { to { transform: rotate(360deg); } }
-  textarea {
+  .modal-body textarea {
     width: 100%;
     font: 13px var(--font-ui);
     color: var(--text-primary);
@@ -934,7 +993,7 @@
     padding: 10px 12px;
     resize: vertical;
   }
-  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .modal-body textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .modal-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .thread-box { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; }
   .m-user {
@@ -962,16 +1021,8 @@
   .tools[open] summary { color: var(--text-secondary); }
   .tool-list { padding: 6px 10px 2px; border-left: 2px solid var(--border-subtle); margin: 4px 0 0 8px; }
   .m-err { color: var(--diff-del); font-size: 12.5px; }
-  .composer { border-top: 1px solid var(--border-subtle); padding: 12px 16px; }
-  .composer textarea { margin-bottom: 0; }
-  .c-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .composer { border-top: 1px solid var(--border-subtle); padding: 10px 14px 12px; }
   .queue-note { font-size: 11.5px; color: var(--status-running); }
-  .e-bar { display: flex; gap: 12px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
-  .engine {
-    font-size: 11.5px; color: var(--text-secondary);
-    background: var(--surface-2); border: 1px solid var(--border-subtle);
-    border-radius: 999px; padding: 2px 10px;
-  }
   .mono-s { font-family: var(--font-mono); font-size: 11px; }
   .ctx { background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; overflow-y: auto; }
   .repo { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px; }
