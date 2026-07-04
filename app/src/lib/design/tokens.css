@@ -13,8 +13,10 @@
   --surface-2: oklch(28.5% 0.005 280);
   --surface-3: oklch(32.5% 0.006 280);
 
-  --border-subtle: oklch(36% 0.005 280 / 0.55);
-  --border-strong: oklch(46% 0.006 280 / 0.75);
+  /* liquid-glass edges: translucent WHITE borders read as glass rims (ZCode) */
+  --border-subtle: oklch(100% 0 0 / 0.07);
+  --border-strong: oklch(100% 0 0 / 0.14);
+  --glass-highlight: oklch(100% 0 0 / 0.05);
 
   /* text */
   --text-primary: oklch(93% 0.004 280);

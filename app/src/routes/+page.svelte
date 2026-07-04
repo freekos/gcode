@@ -34,6 +34,9 @@
 
   const PRIORITY: Record<string, number> = { needs_input: 0, review: 1, running: 2, new: 3, done: 4 };
   function sortTasks(ts: Task[]): Task[] {
+    if (sortBy === "created") {
+      return [...ts].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
     return [...ts].sort((a, b) => (PRIORITY[a.status] ?? 9) - (PRIORITY[b.status] ?? 9));
   }
 
@@ -50,6 +53,9 @@
   let paletteOpen = $state(false);
   let collapsed: Record<number, boolean> = $state({});
   let sbw = $state(260);
+  let showArchived = $state(false);
+  let sortBy: "status" | "created" = $state("status");
+  let viewMenuOpen = $state(false);
 
   function startResize(e: PointerEvent) {
     e.preventDefault();
@@ -175,7 +181,7 @@
   async function reload() {
     const projects = await projectsList();
     tree = await Promise.all(
-      projects.map(async (p) => ({ project: p, tasks: sortTasks(await tasksList(p.id)) })),
+      projects.map(async (p) => ({ project: p, tasks: sortTasks(await tasksList(p.id, showArchived)) })),
     );
     project = project ?? projects[0];
     if (selected) {
@@ -310,6 +316,12 @@
   }
 </script>
 
+<svelte:window
+  onclick={(e) => {
+    if (viewMenuOpen && !(e.target as HTMLElement).closest(".viewmenu-wrap")) viewMenuOpen = false;
+  }}
+/>
+
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
 <div class="layout" class:with-ctx={!!selected} style="--sbw:{sbw}px">
@@ -326,6 +338,41 @@
       Поиск
       <span class="hk-static"><Kbd keys="⌘K" /></span>
     </button>
+
+    <div class="sb-head">
+      <span class="seg">
+        <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+        Проекты
+      </span>
+      <button class="iconbtn" title="Добавить проект" onclick={addProject}>
+        <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </button>
+      <span style="flex:1"></span>
+      <div class="viewmenu-wrap">
+        <button class="iconbtn" title="Вид и сортировка" onclick={() => (viewMenuOpen = !viewMenuOpen)}>
+          <svg class="ic" viewBox="0 0 16 16"><path d="M2.5 4.5h11M4.5 8h7M6.5 11.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </button>
+        {#if viewMenuOpen}
+          <div class="viewmenu" role="menu">
+            <div class="vm-sec">Вид</div>
+            <button class="vm-item" onclick={() => (viewMenuOpen = false)}>
+              По проектам <span class="vm-check">✓</span>
+            </button>
+            <button class="vm-item" disabled title="скоро">Таймлайн</button>
+            <div class="vm-sec">Сортировка</div>
+            <button class="vm-item" onclick={() => { sortBy = "status"; viewMenuOpen = false; reload(); }}>
+              По статусу {#if sortBy === "status"}<span class="vm-check">✓</span>{/if}
+            </button>
+            <button class="vm-item" onclick={() => { sortBy = "created"; viewMenuOpen = false; reload(); }}>
+              По созданию {#if sortBy === "created"}<span class="vm-check">✓</span>{/if}
+            </button>
+          </div>
+        {/if}
+      </div>
+      <button class="iconbtn" class:on={showArchived} title="Архивные задачи" onclick={() => { showArchived = !showArchived; reload(); }}>
+        <svg class="ic" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M3.2 6.4V12c0 .7.6 1.3 1.3 1.3h7c.7 0 1.3-.6 1.3-1.3V6.4M6.4 9h3.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
 
     {#if tree.length === 0}
       <div class="empty-side">
@@ -346,16 +393,15 @@
                 <p class="mut" style="margin:2px 8px 6px">нет задач</p>
               {:else}
                 {#each node.tasks as t (t.id)}
-                  <TaskRow title={t.title} status={t.status} hotkey={hotkeyOf(t)} time={ago(t.created_at)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
+                  <div class:dim-arch={t.archived}>
+                    <TaskRow title={t.title} status={t.status} hotkey={hotkeyOf(t)} time={ago(t.created_at)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
+                  </div>
                 {/each}
               {/if}
             </div>
           {/if}
         </div>
       {/each}
-      <button class="newtask addproj" onclick={addProject}>
-        <span class="plus">＋</span> проект
-      </button>
     {/if}
     <div class="sb-bottom">
       <button class="newtask" style="margin:0" title="Настройки · ⌘, (скоро)">
@@ -499,11 +545,6 @@
       {/if}
     </aside>
   {/if}
-  <div class="statusbar">
-    <span>{tree.length} проектов · {ordered.length} задач</span>
-    <span>● {Object.values(threads).filter((t) => t.running).length} агентов работают</span>
-    <span style="margin-left:auto">gcode 0.1</span>
-  </div>
 </div>
 
 <Modal bind:open={addProjOpen} width="520px">
@@ -570,22 +611,81 @@
   .layout {
     display: grid;
     grid-template-columns: var(--sbw, 260px) 1fr;
-    grid-template-rows: 1fr auto;
+    grid-template-rows: 1fr;
     height: 100vh;
   }
   .layout.with-ctx { grid-template-columns: var(--sbw, 260px) 1fr 230px; }
-  .statusbar {
-    grid-column: 1 / -1;
+  .sb-head {
     display: flex;
-    gap: 16px;
     align-items: center;
-    border-top: 1px solid var(--border-subtle);
-    padding: 4px 14px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
+    gap: 4px;
+    margin: 8px 0 4px;
+    position: relative;
   }
-  .addproj { margin-top: 4px; }
+  .seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: 600 12px var(--font-ui);
+    color: var(--text-primary);
+    background: var(--surface-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 3px 11px;
+  }
+  .iconbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
+  }
+  .iconbtn:hover { background: var(--surface-2); color: var(--text-primary); }
+  .iconbtn.on { color: var(--accent); background: var(--accent-soft); }
+  .viewmenu-wrap { position: relative; display: inline-flex; }
+  .viewmenu {
+    position: absolute;
+    top: 30px;
+    right: 0;
+    z-index: 40;
+    min-width: 190px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    box-shadow: 0 16px 40px oklch(0% 0 0 / 0.45), inset 0 1px 0 var(--glass-highlight);
+    padding: 6px;
+  }
+  .vm-sec {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: 6px 8px 2px;
+  }
+  .vm-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    font: 13px var(--font-ui);
+    padding: 7px 8px;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    text-align: left;
+  }
+  .vm-item:hover { background: var(--surface-2); }
+  .vm-item:disabled { color: var(--text-disabled); cursor: default; }
+  .vm-check { color: var(--accent); }
+  .dim-arch { opacity: 0.5; }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
   .drag-strip { height: 26px; flex: none; margin: -12px -12px 0; }
   .sb-bottom {
@@ -617,6 +717,7 @@
     padding: 12px 14px;
   }
   :global(:root.native) .hub-box { background: var(--surface-2); }
+  .hub-box { box-shadow: inset 0 1px 0 var(--glass-highlight); }
   .hub-proj { margin-bottom: 6px; }
   .proj-chip {
     display: inline-flex;
@@ -683,7 +784,6 @@
     background: color-mix(in oklab, var(--surface-1) 55%, transparent);
   }
   :global(:root.native) main { background: var(--surface-0); }
-  :global(:root.native) .statusbar { background: color-mix(in oklab, var(--surface-1) 55%, transparent); }
   .sb-resize {
     position: absolute;
     top: 0;
@@ -711,7 +811,6 @@
     margin-bottom: 2px;
   }
   .newtask:hover { background: var(--surface-2); color: var(--text-primary); }
-  .newtask .plus { color: var(--accent); font-weight: 700; }
   .hk-static { margin-left: auto; }
   .pnode { display: flex; flex-direction: column; margin-bottom: 4px; }
   .phead {

@@ -94,9 +94,14 @@ fn project_add(app: TState<'_, App>, path: String) -> Result<ProjectDto, String>
 }
 
 #[tauri::command]
-fn tasks_list(app: TState<'_, App>, project_id: i64) -> Result<Vec<TaskDto>, String> {
+fn tasks_list(
+    app: TState<'_, App>,
+    project_id: i64,
+    include_archived: Option<bool>,
+) -> Result<Vec<TaskDto>, String> {
+    let inc = include_archived.unwrap_or(false);
     app.handle
-        .call(move |st| st.list_tasks(project_id, false))
+        .call(move |st| st.list_tasks(project_id, inc))
         .map(|tasks| {
             tasks
                 .into_iter()

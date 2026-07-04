@@ -53,6 +53,7 @@ const demoTaskSets: Record<number, Task[]> = {
   2: [
     { id: 3, title: "Разберись с ценой в KG", slug: "fix-kg-price", branch: "fix-kg-price", status: "needs_input", archived: false, created_at: "2026-07-03 10:00:00" },
     { id: 5, title: "Лендинг лояльности", slug: "loyalty-landing", branch: "loyalty-landing", status: "done", archived: false, created_at: "2026-07-03 10:00:00" },
+    { id: 6, title: "Старая миграция БД", slug: "old-db-migration", branch: "old-db-migration", status: "done", archived: true, created_at: "2026-06-20 10:00:00" },
   ],
 };
 let demoId = 5;
@@ -73,9 +74,12 @@ export async function projectAdd(path: string): Promise<Project> {
   return invoke<Project>("project_add", { path });
 }
 
-export async function tasksList(projectId: number): Promise<Task[]> {
-  if (!inTauri) return demoTaskSets[projectId] ?? [];
-  return invoke<Task[]>("tasks_list", { projectId });
+export async function tasksList(projectId: number, includeArchived = false): Promise<Task[]> {
+  if (!inTauri) {
+    const ts = demoTaskSets[projectId] ?? [];
+    return includeArchived ? ts : ts.filter((t) => !t.archived);
+  }
+  return invoke<Task[]>("tasks_list", { projectId, includeArchived });
 }
 
 export async function taskCreate(projectId: number, prompt: string): Promise<void> {
