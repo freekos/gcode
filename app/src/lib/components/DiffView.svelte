@@ -1,5 +1,6 @@
 <script lang="ts">
   import DiffStat from "./DiffStat.svelte";
+  import { autogrow } from "$lib/actions";
   import Button from "./Button.svelte";
   import type { DiffFile } from "$lib/api";
 
@@ -87,7 +88,19 @@
     onsend(pending);
     pending = [];
   }
+  function clearSel() {
+    composerAt = null;
+    selFile = null;
+    selFrom = selTo = null;
+    commentText = "";
+  }
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key === "Escape" && selFile) clearSel();
+  }}
+/>
 
 <div class="diffwrap">
   {#if files.length === 0}
@@ -128,6 +141,7 @@
             <div class="cbox">
               <div class="crange mono">{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · shift+клик — диапазон</div>
               <textarea
+                use:autogrow
                 bind:value={commentText}
                 rows="2"
                 placeholder="Комментарий агенту к этим строкам…"
@@ -139,7 +153,7 @@
                 }}
               ></textarea>
               <div class="cbar">
-                <Button variant="ghost" onclick={() => { composerAt = null; selFile = null; selFrom = selTo = null; }}>Отмена</Button>
+                <Button variant="ghost" onclick={clearSel}>Отмена</Button>
                 <Button variant="primary" onclick={addComment}>Добавить в пачку ⏎</Button>
               </div>
             </div>

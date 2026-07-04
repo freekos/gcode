@@ -7,6 +7,31 @@
   onMount(() => {
     if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("native");
 
+    // app zoom: cmd+= / cmd+- / cmd+0 (persisted)
+    let zoom = Number(localStorage.getItem("gcode.zoom") ?? 1) || 1;
+    const applyZoom = () => {
+      (document.body.style as CSSStyleDeclaration & { zoom: string }).zoom = String(zoom);
+      localStorage.setItem("gcode.zoom", String(zoom));
+    };
+    applyZoom();
+    const onZoomKey = (e: KeyboardEvent) => {
+      if (!e.metaKey) return;
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        zoom = Math.min(1.5, Math.round((zoom + 0.1) * 10) / 10);
+        applyZoom();
+      } else if (e.key === "-") {
+        e.preventDefault();
+        zoom = Math.max(0.7, Math.round((zoom - 0.1) * 10) / 10);
+        applyZoom();
+      } else if (e.key === "0") {
+        e.preventDefault();
+        zoom = 1;
+        applyZoom();
+      }
+    };
+    window.addEventListener("keydown", onZoomKey);
+
     // global tooltip: one fixed pill, clamped to the viewport (panels clip ::after)
     const tip = document.createElement("div");
     tip.id = "gc-tip";
@@ -37,6 +62,9 @@
     document.addEventListener("mouseover", onOver);
     document.addEventListener("mouseout", onOut);
     document.addEventListener("mousedown", () => tip.classList.remove("show"));
+    // (zoom listener cleanup)
+    const cleanupZoom = () => window.removeEventListener("keydown", onZoomKey);
+    void cleanupZoom;
     const onErr = (e: ErrorEvent) => (fatal = `${e.message}\n${e.filename}:${e.lineno}`);
     const onRej = (e: PromiseRejectionEvent) => (fatal = `unhandled rejection: ${e.reason}`);
     window.addEventListener("error", onErr);

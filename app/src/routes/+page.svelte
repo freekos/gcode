@@ -35,6 +35,7 @@
   } from "$lib/api";
   import DiffStat from "$lib/components/DiffStat.svelte";
   import DiffView, { type PendingComment } from "$lib/components/DiffView.svelte";
+  import { autogrow } from "$lib/actions";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn"; text: string };
   type ThreadState = {
@@ -74,6 +75,27 @@
   let paletteOpen = $state(false);
   let collapsed: Record<number, boolean> = $state({});
   let sbw = $state(260);
+  let ctxw = $state(230); // right panel width (resizable)
+  let diffw = $state(560); // right panel width in diff mode
+
+  function startCtxResize(e: PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = diffOpen ? diffw : ctxw;
+    const move = (ev: PointerEvent) => {
+      const w = startW + (startX - ev.clientX);
+      if (diffOpen) diffw = Math.min(Math.round(window.innerWidth * 0.6), Math.max(460, w));
+      else ctxw = Math.min(420, Math.max(210, w));
+    };
+    const up = () => {
+      localStorage.setItem("gcode.ctx.width", String(ctxw));
+      localStorage.setItem("gcode.diff.width", String(diffw));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
   let showArchived = $state(false);
   let sortBy: "status" | "created" = $state("status");
   let viewMenuOpen = $state(false);
@@ -273,6 +295,8 @@
       collapsed = {};
     }
     sbw = Number(localStorage.getItem("gcode.sidebar.width") ?? 260) || 260;
+    ctxw = Number(localStorage.getItem("gcode.ctx.width") ?? 230) || 230;
+    diffw = Number(localStorage.getItem("gcode.diff.width") ?? 560) || 560;
     checkUpdate().then((u) => (upd = u));
     reload();
     let un: (() => void) | undefined;
@@ -423,7 +447,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout" class:with-ctx={!!selected} class:diff-wide={diffOpen} style="--sbw:{sbw}px">
+<div class="layout" class:with-ctx={!!selected} class:diff-wide={diffOpen} style="--sbw:{sbw}px; --ctxw:{ctxw}px; --diffw:{diffw}px">
   <aside>
     <div class="drag-strip" data-tauri-drag-region>
       {#if upd}
@@ -651,6 +675,7 @@
       <div class="composer">
         <div class="c-inner glass-rim">
           <textarea
+            use:autogrow
             bind:value={msg}
             rows="2"
             placeholder={cur.running ? "Агент работает — сообщение уйдёт следующим…" : "Сообщение агенту…"}
@@ -701,6 +726,7 @@
           </div>
           <div class="c-inner glass-rim">
             <textarea
+              use:autogrow
               bind:this={hubTa}
               bind:value={hubPrompt}
               oninput={saveHubDraft}
@@ -736,6 +762,7 @@
   </main>
   {#if selected && diffOpen}
     <aside class="ctx ctx-diff">
+      <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="dp-head">
         <div class="diff-toolbar" style="padding:0">
           {#if ctx}
@@ -753,6 +780,7 @@
     </aside>
   {:else if selected}
     <aside class="ctx">
+      <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
       {#if ctx && ctx.touched.length}
         {#each ctx.touched as r (r.repo)}
@@ -841,8 +869,8 @@
     min-width: 0;
     height: 100%;
   }
-  .with-ctx .card { grid-template-columns: 1fr 230px; }
-  .diff-wide .card { grid-template-columns: 1fr minmax(460px, 44%); }
+  .with-ctx .card { grid-template-columns: 1fr var(--ctxw, 230px); }
+  .diff-wide .card { grid-template-columns: 1fr var(--diffw, 560px); }
   .card { position: relative; }
   .card-actions {
     position: absolute;
