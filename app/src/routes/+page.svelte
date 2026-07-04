@@ -36,8 +36,14 @@
   import DiffStat from "$lib/components/DiffStat.svelte";
   import DiffView, { type PendingComment } from "$lib/components/DiffView.svelte";
 
-  type ThreadItem = { kind: "user" | "agent" | "tool" | "error"; text: string };
-  type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[]; waiting?: boolean };
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn"; text: string };
+  type ThreadState = {
+    items: ThreadItem[];
+    running: boolean;
+    queue: string[];
+    waiting?: boolean;
+    turnStart?: number;
+  };
 
   type ProjectNode = { project: Project; tasks: Task[] };
   let tree: ProjectNode[] = $state([]);
@@ -153,6 +159,15 @@
   const cur = $derived(selected ? (threads[selected.id] ?? EMPTY) : EMPTY);
 
   type Block = { kind: "msg"; item: ThreadItem } | { kind: "tools"; tools: string[] };
+
+  /// light inline-markdown: `code` chips in agent text
+  function inlineSegs(text: string): { code: boolean; t: string }[] {
+    return text.split(/(`[^`\n]+`)/g).filter(Boolean).map((part) =>
+      part.startsWith("`") && part.endsWith("`")
+        ? { code: true, t: part.slice(1, -1) }
+        : { code: false, t: part },
+    );
+  }
   // consecutive tool events fold into one collapsible block (review: tool spam)
   const blocks = $derived.by(() => {
     const out: Block[] = [];
@@ -198,6 +213,7 @@
     t.items.push({ kind: "user", text: prompt });
     t.running = true;
     t.waiting = true; // skeleton "agent is connecting" until the first event
+    t.turnStart = Date.now();
     scrollDown();
     threadSend(taskId, prompt);
   }
@@ -221,6 +237,12 @@
       t.items.push({ kind: "tool", text: e.text });
     } else if (e.kind === "done") {
       t.running = false;
+      if (t.turnStart) {
+        const sec = Math.round((Date.now() - t.turnStart) / 1000);
+        const dur = sec >= 60 ? `${Math.floor(sec / 60)}м ${sec % 60}с` : `${sec}с`;
+        t.items.push({ kind: "turn", text: dur });
+        t.turnStart = undefined;
+      }
       if (e.ok === false) t.items.push({ kind: "error", text: e.text || "агент завершился с ошибкой" });
       loadCtx();
       const next = t.queue.shift();
@@ -634,7 +656,9 @@
             {:else if b.item.kind === "user"}
               <div class="m-user">{b.item.text}</div>
             {:else if b.item.kind === "agent"}
-              <div class="m-agent">{b.item.text}</div>
+              <div class="m-agent">{#each inlineSegs(b.item.text) as seg, si (si)}{#if seg.code}<code class="mchip">{seg.t}</code>{:else}{seg.t}{/if}{/each}</div>
+            {:else if b.item.kind === "turn"}
+              <div class="m-turn"><span>Работал {b.item.text}</span><span class="tline"></span></div>
             {:else}
               <div class="m-err">{b.item.text}</div>
             {/if}
@@ -1236,13 +1260,31 @@
   @keyframes gc-spin { to { transform: rotate(360deg); } }
   .modal-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .thread-box { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; }
+  .thread-box > :global(*) { width: 100%; max-width: 860px; margin-left: auto; margin-right: auto; }
   .m-user {
-    align-self: flex-end;
     background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--r-lg);
-    padding: 8px 12px;
-    max-width: 80%;
+    padding: 9px 13px;
+    max-width: 66% !important;
+    margin-right: 0 !important;
   }
+  .mchip {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 1px 7px;
+  }
+  .m-turn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 6px 0;
+  }
+  .m-turn .tline { flex: 1; height: 1px; background: var(--border-subtle); }
   .m-agent { color: var(--text-primary); max-width: 92%; white-space: pre-wrap; }
   .m-tool { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); padding: 1px 0; }
   .tools summary {
@@ -1261,7 +1303,8 @@
   .tools[open] summary { color: var(--text-secondary); }
   .tool-list { padding: 6px 10px 2px; border-left: 2px solid var(--border-subtle); margin: 4px 0 0 8px; }
   .m-err { color: var(--diff-del); font-size: 12.5px; }
-  .composer { border-top: 1px solid var(--border-subtle); padding: 10px 14px 12px; }
+  .composer { padding: 6px 22px 16px; }
+  .composer .c-inner { max-width: 860px; margin: 0 auto; border-radius: 16px; }
   .queue-note { font-size: 11.5px; color: var(--status-running); }
   .mono-s { font-family: var(--font-mono); font-size: 11px; }
   .ctx { background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; overflow-y: auto; }
