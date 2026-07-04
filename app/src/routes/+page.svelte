@@ -467,6 +467,7 @@
     <div class="sb-resize" role="separator" aria-orientation="vertical" aria-label="Ширина сайдбара" onpointerdown={startResize}></div>
   </aside>
 
+  <div class="card">
   <main>
     {#if creating}
       <div class="center-empty">
@@ -620,6 +621,7 @@
       {/if}
     </aside>
   {/if}
+  </div>
 </div>
 
 <Modal bind:open={addProjOpen} width="520px">
@@ -693,19 +695,26 @@
     grid-template-rows: 1fr;
     height: 100vh;
   }
-  /* native: ZCode-style window frame — content inset from the window edge,
-     the 8px rim behind is a drag region (win-frame in the layout root) */
-  :global(:root.native) .layout {
-    margin: 10px 14px 14px;
+  /* content card: the CENTER is the floating opaque panel (ZCode layout) —
+     the sidebar lives directly on the window glass */
+  .card {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-width: 0;
+    height: 100%;
+  }
+  .with-ctx .card { grid-template-columns: 1fr 230px; }
+  :global(:root.native) .card {
+    margin: 10px 14px 14px 0;
     height: calc(100vh - 24px);
+    background: var(--surface-0);
     border: 1px solid var(--border-subtle);
-    border-radius: 14px;
+    border-radius: 16px;
     overflow: hidden;
     box-shadow:
       inset 0 1px 0 var(--glass-highlight),
       0 12px 40px oklch(0% 0 0 / 0.35);
   }
-  .layout.with-ctx { grid-template-columns: var(--sbw, 260px) 1fr 230px; }
   .sb-head {
     display: flex;
     align-items: center;
@@ -976,11 +985,12 @@
     gap: 8px;
     overflow-y: auto;
   }
-  /* native window: vibrancy glass shows through the translucent sidebar */
+  /* native window: the sidebar sits directly on the vibrancy glass */
   :global(:root.native) aside {
-    background: color-mix(in oklab, var(--surface-1) 55%, transparent);
+    background: transparent;
+    border-right: 0;
   }
-  :global(:root.native) main { background: var(--surface-0); }
+  :global(:root.native) main { background: transparent; }
   .sb-resize {
     position: absolute;
     top: 0;
@@ -1104,6 +1114,7 @@
   .queue-note { font-size: 11.5px; color: var(--status-running); }
   .mono-s { font-family: var(--font-mono); font-size: 11px; }
   .ctx { background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; overflow-y: auto; }
+  :global(:root.native) .ctx { background: color-mix(in oklab, var(--surface-1) 70%, transparent); }
   .repo { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px; }
   .rn { font-family: var(--font-mono); font-size: 11.5px; }
   .rrow { display: flex; gap: 10px; margin-top: 3px; align-items: center; }
