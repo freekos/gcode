@@ -17,6 +17,9 @@
     projectAdd,
     pickFolder,
     revealProject,
+    checkUpdate,
+    openUrl,
+    type UpdateInfo,
     type Project,
     type Task,
     type ThreadEvent,
@@ -57,6 +60,8 @@
   let showArchived = $state(false);
   let sortBy: "status" | "created" = $state("status");
   let viewMenuOpen = $state(false);
+  let upd: UpdateInfo | undefined = $state();
+  let updOpen = $state(false);
 
   function startResize(e: PointerEvent) {
     e.preventDefault();
@@ -199,6 +204,7 @@
       collapsed = {};
     }
     sbw = Number(localStorage.getItem("gcode.sidebar.width") ?? 260) || 260;
+    checkUpdate().then((u) => (upd = u));
     reload();
     let un: (() => void) | undefined;
     let unThread: (() => void) | undefined;
@@ -327,7 +333,34 @@
 
 <div class="layout" class:with-ctx={!!selected} style="--sbw:{sbw}px">
   <aside>
-    <div class="drag-strip" data-tauri-drag-region></div>
+    <div class="drag-strip" data-tauri-drag-region>
+      {#if upd}
+        <div
+          class="upd-wrap"
+          role="status"
+          onmouseenter={() => (updOpen = upd?.available ?? false)}
+          onmouseleave={() => (updOpen = false)}
+        >
+          {#if upd.available}
+            <button class="upd-btn" onclick={() => openUrl(upd!.url)}>Update</button>
+            {#if updOpen}
+              <div class="upd-pop">
+                <b>v{upd.version}</b>
+                <span class="mut" style="font-size:11.5px">{upd.date}</span>
+                <div class="upd-notes">
+                  {#each upd.notes.split("\n").filter((l) => l.trim()) as line, i (i)}
+                    <p>{line.replace(/^[-*] /, "• ")}</p>
+                  {/each}
+                </div>
+                <span class="mut" style="font-size:11px">клик по Update — открыть релиз · автоустановка в фазе 9</span>
+              </div>
+            {/if}
+          {:else}
+            <span class="upd-ver">v{upd.current}</span>
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     <button class="newtask" onclick={() => (createOpen = true)}>
       <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 5.2v5.6M5.2 8h5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -745,7 +778,50 @@
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
-  .drag-strip { height: 44px; flex: none; margin: -12px -12px 0; }
+  .drag-strip {
+    height: 44px;
+    flex: none;
+    margin: -12px -12px 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 10px;
+  }
+  .upd-wrap { position: relative; }
+  .upd-btn {
+    background: oklch(62% 0.14 150);
+    color: oklch(15% 0.03 150);
+    border: 0;
+    border-radius: 999px;
+    font: 700 12px var(--font-ui);
+    padding: 4px 14px;
+    cursor: pointer;
+    transition: filter var(--t-fast) ease-out;
+  }
+  .upd-btn:hover { filter: brightness(1.08); }
+  .upd-ver {
+    font: 500 11px var(--font-mono);
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+  .upd-pop {
+    position: fixed;
+    top: 52px;
+    left: 14px;
+    z-index: 200;
+    width: min(430px, 80vw);
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    padding: 14px 16px;
+    box-shadow: 0 20px 50px oklch(0% 0 0 / 0.5), inset 0 1px 0 var(--glass-highlight);
+  }
+  .upd-pop b { font-size: 14px; margin-right: 8px; }
+  .upd-notes { margin: 10px 0; max-height: 300px; overflow-y: auto; }
+  .upd-notes p { margin: 4px 0; color: var(--text-secondary); font-size: 12.5px; }
   .sb-bottom {
     margin-top: auto;
     display: flex;

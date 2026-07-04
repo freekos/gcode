@@ -192,4 +192,52 @@ export async function revealProject(path: string): Promise<void> {
   await revealItemInDir(path);
 }
 
+export interface UpdateInfo {
+  version: string;      // e.g. "0.2.0"
+  current: string;
+  notes: string;
+  date: string;
+  url: string;
+  available: boolean;
+}
+
+/** Check GitHub Releases for a newer version (updater install lands in phase 9). */
+export async function checkUpdate(): Promise<UpdateInfo> {
+  let current = "0.1.0";
+  if (inTauri) {
+    const { getVersion } = await import("@tauri-apps/api/app");
+    current = await getVersion();
+  }
+  const fallback: UpdateInfo = { version: current, current, notes: "", date: "", url: "", available: false };
+  try {
+    const r = await fetch("https://api.github.com/repos/freekos/gcode/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!r.ok) return fallback;
+    const j = await r.json();
+    const version = String(j.tag_name ?? "").replace(/^v/, "");
+    if (!version) return fallback;
+    const newer = version.localeCompare(current, undefined, { numeric: true }) > 0;
+    return {
+      version,
+      current,
+      notes: String(j.body ?? ""),
+      date: String(j.published_at ?? "").slice(0, 10),
+      url: String(j.html_url ?? ""),
+      available: newer,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export async function openUrl(url: string): Promise<void> {
+  if (!inTauri) {
+    window.open(url, "_blank");
+    return;
+  }
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(url);
+}
+
 export const isDemo = !inTauri;
