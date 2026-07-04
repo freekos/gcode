@@ -300,6 +300,31 @@ fn thread_send(
     Ok(())
 }
 
+/// Stop the running turn: soft = control-protocol interrupt (process lives on);
+/// force = kill the session (it respawns with --resume on the next send).
+#[tauri::command]
+fn thread_stop(app_handle: AppHandle, app: TState<'_, App>, task_id: i64, force: bool) -> Result<(), String> {
+    let mut sessions = app.sessions.lock().unwrap();
+    if force {
+        if let Some(mut s) = sessions.remove(&task_id) {
+            s.kill();
+        }
+        let _ = app.handle.call(move |st| st.finish_agent(task_id));
+        let _ = app_handle.emit(
+            "thread-event",
+            ThreadEvent { task_id, kind: "done".into(), text: "остановлено".into(), ok: Some(false), resets_at: None },
+        );
+        let _ = app_handle.emit("tasks-changed", serde_json::json!({ "ok": true }));
+        return Ok(());
+    }
+    if let Some(s) = sessions.get_mut(&task_id) {
+        s.interrupt().map_err(err_s)?;
+    } else {
+        let _ = app.handle.call(move |st| st.finish_agent(task_id));
+    }
+    Ok(())
+}
+
 /// History of the task's latest thread, read back from Claude's own transcript.
 #[tauri::command]
 fn thread_history(
@@ -473,6 +498,7 @@ pub fn run() {
             tasks_list,
             task_create,
             thread_send,
+            thread_stop,
             thread_history,
             task_context,
             task_pin,

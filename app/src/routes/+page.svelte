@@ -12,6 +12,7 @@
     taskPin,
     taskArchive,
     threadSend,
+    threadStop,
     onThreadEvent,
     onTasksChanged,
     onTaskRenamed,
@@ -149,6 +150,12 @@
     editorPath = rel;
     diffOpen = false;
     editorOpen = true;
+  }
+
+  function quoteReply(text: string) {
+    const q = text.split("\n").slice(0, 6).map((l) => `> ${l}`).join("\n");
+    msg = `${q}\n\n${msg}`;
+    document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   }
 
   // cmd-L: drop a code quote into the agent composer (points the agent at code)
@@ -328,12 +335,21 @@
     msg = "";
   }
 
+  let stopRequested = $state(false);
+
+  function stopTurn() {
+    if (!selected) return;
+    threadStop(selected.id, stopRequested); // 2nd click = force kill
+    stopRequested = true;
+  }
+
   function fire(taskId: number, prompt: string) {
     const t = th(taskId);
     t.items.push({ kind: "user", text: prompt });
     t.running = true;
     t.waiting = true; // skeleton "agent is connecting" until the first event
     t.turnStart = Date.now();
+    stopRequested = false;
     scrollDown();
     threadSend(taskId, prompt);
   }
@@ -357,6 +373,7 @@
       t.items.push({ kind: "tool", text: e.text });
     } else if (e.kind === "done") {
       t.running = false;
+      stopRequested = false;
       if (t.turnStart) {
         const sec = Math.round((Date.now() - t.turnStart) / 1000);
         const dur = sec >= 60 ? `${Math.floor(sec / 60)}м ${sec % 60}с` : `${sec}с`;
@@ -797,9 +814,26 @@
                 </div>
               </details>
             {:else if b.item.kind === "user"}
-              <div class="m-user">{b.item.text}</div>
+              <div class="m-user-wrap">
+                <span class="msg-acts">
+                  <button class="ma" data-tip="Повторить промпт" aria-label="Повторить" onclick={() => selected && !cur.running && fire(selected.id, b.item.text)}>
+                    <svg class="ic-xs" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.8v2.6h-2.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button class="ma" data-tip="Цитировать в ответ" aria-label="Цитировать" onclick={() => quoteReply(b.item.text)}>
+                    <svg class="ic-xs" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                  </button>
+                </span>
+                <div class="m-user">{b.item.text}</div>
+              </div>
             {:else if b.item.kind === "agent"}
+              <div class="m-agent-wrap">
+                <span class="msg-acts left">
+                  <button class="ma" data-tip="Цитировать в ответ" aria-label="Цитировать" onclick={() => quoteReply(b.item.text)}>
+                    <svg class="ic-xs" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                  </button>
+                </span>
               <div class="m-agent">{#each inlineSegs(b.item.text) as seg, si (si)}{#if seg.code}<code class="mchip">{seg.t}</code>{:else}{seg.t}{/if}{/each}</div>
+              </div>
             {:else if b.item.kind === "review"}
               {@const revs = JSON.parse(b.item.text)}
               <div class="m-review">
@@ -854,6 +888,11 @@
               <span class="mut mono-s" data-tip="Окно лимита подписки" aria-label="Лимит">↻ {limit.kind === "five_hour" ? "5h" : limit.kind} · {fmtReset(limit.resetsAt)}</span>
             {/if}
             <button class="engine-chip" data-tip="Движок треда" aria-label="Движок треда">◆ Claude <span class="chev2">⌄</span></button>
+            {#if cur.running}
+              <button class="send stop" data-tip={stopRequested ? "Ещё раз — жёсткая остановка" : "Остановить ход"} aria-label="Остановить" onclick={stopTurn}>
+                <svg class="ic" viewBox="0 0 16 16"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1.4" fill="currentColor"/></svg>
+              </button>
+            {/if}
             <button class="send" onclick={sendMsg} data-tip={cur.running ? "В очередь · ⏎" : "Отправить · ⏎"} aria-label="Отправить">
               <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
             </button>
@@ -1173,6 +1212,21 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
+  .m-user-wrap { display: flex; align-items: flex-start; justify-content: flex-end; gap: 6px; }
+  .m-user-wrap .m-user { margin-right: 0 !important; }
+  .m-agent-wrap { display: flex; align-items: flex-start; gap: 6px; }
+  .msg-acts { display: none; gap: 2px; flex: none; padding-top: 6px; }
+  .m-user-wrap:hover .msg-acts, .m-agent-wrap:hover .msg-acts { display: inline-flex; }
+  .msg-acts.left { order: 2; }
+  .ma {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border: 0; border-radius: 5px;
+    background: var(--surface-2); color: var(--text-muted); cursor: pointer; padding: 0;
+  }
+  .ma:hover { color: var(--text-primary); }
+  .ic-xs { width: 11px; height: 11px; }
+  .send.stop { background: var(--surface-3); color: var(--status-error, oklch(65% 0.15 25)); }
+  .send.stop:hover { filter: brightness(1.2); }
   .ft-wrap { overflow-y: auto; flex: 1; padding: 2px 4px; }
   .repo-chip {
     display: inline-flex; align-items: center; gap: 8px;

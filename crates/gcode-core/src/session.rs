@@ -91,6 +91,19 @@ impl LiveSession {
             .map_err(|e| CoreError::Invalid(format!("session write: {e}")))
     }
 
+    /// Interrupt the CURRENT turn (control protocol); the process stays alive
+    /// and the turn ends with a result event. Hard fallback is kill().
+    pub fn interrupt(&mut self) -> Result<()> {
+        let msg = serde_json::json!({
+            "type": "control_request",
+            "request_id": format!("int-{}", std::process::id()),
+            "request": { "subtype": "interrupt" }
+        });
+        writeln!(self.stdin, "{msg}")
+            .and_then(|_| self.stdin.flush())
+            .map_err(|e| CoreError::Invalid(format!("interrupt: {e}")))
+    }
+
     pub fn alive(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(None))
     }

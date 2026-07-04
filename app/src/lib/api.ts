@@ -377,4 +377,12 @@ export async function projectFileWrite(projectId: number, rel: string, content: 
   return invoke<void>("project_file_write", { projectId, rel, content });
 }
 
+export async function threadStop(taskId: number, force: boolean): Promise<void> {
+  if (!inTauri) {
+    window.dispatchEvent(new CustomEvent("demo-thread-event", { detail: { task_id: taskId, kind: "done", text: "остановлено", ok: false } }));
+    return;
+  }
+  return invoke<void>("thread_stop", { taskId, force });
+}
+
 export const isDemo = !inTauri;
