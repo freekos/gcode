@@ -346,6 +346,16 @@ fn logs_export(app: TState<'_, App>, path: String) -> Result<usize, String> {
     Ok(lines.len())
 }
 
+/// Working-tree diff of one repo of a task (review loop).
+#[tauri::command]
+fn task_diff(
+    app: TState<'_, App>,
+    task_id: i64,
+    repo: String,
+) -> Result<Vec<gcode_core::diff::DiffFile>, String> {
+    gcode_core::diff::task_diff(&app.handle, task_id, &repo).map_err(err_s)
+}
+
 #[tauri::command]
 fn task_pin(app: TState<'_, App>, task_id: i64, pinned: bool) -> Result<(), String> {
     app.handle
@@ -422,6 +432,7 @@ pub fn run() {
             task_context,
             task_pin,
             task_archive,
+            task_diff,
             logs_export,
             task_set_status
         ])

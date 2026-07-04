@@ -302,4 +302,34 @@ export async function taskArchive(taskId: number): Promise<void> {
   return invoke<void>("task_archive", { taskId });
 }
 
+export interface DiffLine { kind: "ctx" | "add" | "del"; text: string; old_no: number | null; new_no: number | null; }
+export interface DiffHunk { header: string; lines: DiffLine[]; }
+export interface DiffFile { path: string; status: string; add: number; del: number; hunks: DiffHunk[]; }
+
+export async function taskDiff(taskId: number, repo: string): Promise<DiffFile[]> {
+  if (!inTauri) {
+    return [
+      {
+        path: "src/auth.ts", status: "modified", add: 2, del: 1,
+        hunks: [{ header: "@@ -38,6 +38,7 @@", lines: [
+          { kind: "ctx", text: "function redirect(user: User) {", old_no: 38, new_no: 38 },
+          { kind: "del", text: "  return url;", old_no: 39, new_no: null },
+          { kind: "add", text: "  const url = withWebviewCookie(base);", old_no: null, new_no: 39 },
+          { kind: "add", text: "  return url;", old_no: null, new_no: 40 },
+          { kind: "ctx", text: "}", old_no: 40, new_no: 41 },
+        ]}],
+      },
+      {
+        path: "tests/auth.test.ts", status: "added", add: 3, del: 0,
+        hunks: [{ header: "@@ -0,0 +1,3 @@", lines: [
+          { kind: "add", text: "it('keeps webview cookie', () => {", old_no: null, new_no: 1 },
+          { kind: "add", text: "  expect(redirect(u)).toContain('wv=1');", old_no: null, new_no: 2 },
+          { kind: "add", text: "});", old_no: null, new_no: 3 },
+        ]}],
+      },
+    ];
+  }
+  return invoke<DiffFile[]>("task_diff", { taskId, repo });
+}
+
 export const isDemo = !inTauri;

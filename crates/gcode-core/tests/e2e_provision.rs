@@ -260,3 +260,34 @@ fn optimistic_branch_rename_updates_worktrees_and_state() {
     });
     assert_eq!(t.branch, "fix-temp-name");
 }
+
+#[test]
+fn task_diff_reports_modified_and_untracked() {
+    use gcode_core::diff::task_diff;
+    let (h, q, _tmp) = setup();
+    let res = provision_task(&h, &q, "azi", "Diff probe", &[]).unwrap();
+    let wt = res.root.join("server");
+    // modify tracked + add untracked
+    std::fs::write(wt.join("README.md"), "# changed\nline2\n").unwrap();
+    std::fs::write(wt.join("brand_new.rs"), "fn hello() {}\n").unwrap();
+
+    let files = task_diff(&h, res.task.id, "server").unwrap();
+    let readme = files
+        .iter()
+        .find(|f| f.path == "README.md")
+        .expect("README in diff");
+    assert_eq!(readme.status, "modified");
+    assert!(readme.add >= 1 && readme.del >= 1);
+    assert!(readme.hunks[0]
+        .lines
+        .iter()
+        .any(|l| l.kind == "add" && l.new_no.is_some()));
+    let newf = files
+        .iter()
+        .find(|f| f.path == "brand_new.rs")
+        .expect("untracked in diff");
+    assert_eq!(newf.status, "added");
+    assert_eq!(newf.add, 1);
+    // unknown repo fails loudly
+    assert!(task_diff(&h, res.task.id, "nope").is_err());
+}

@@ -18,6 +18,8 @@
     isDemo,
     taskContext,
     threadHistory,
+    taskDiff,
+    type DiffFile,
     projectAdd,
     pickFolder,
     revealProject,
@@ -32,6 +34,7 @@
     ago,
   } from "$lib/api";
   import DiffStat from "$lib/components/DiffStat.svelte";
+  import DiffView, { type PendingComment } from "$lib/components/DiffView.svelte";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error"; text: string };
   type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[]; waiting?: boolean };
@@ -71,6 +74,31 @@
   let upd: UpdateInfo | undefined = $state();
   let updOpen = $state(false);
   let helpOpen = $state(false);
+  let view: "thread" | "diff" = $state("thread");
+  let diffRepo: string | null = $state(null);
+  let diffFiles: DiffFile[] = $state([]);
+
+  async function openDiff(repo?: string) {
+    if (!selected) return;
+    const r = repo ?? diffRepo ?? ctx?.touched[0]?.repo;
+    if (!r) return;
+    diffRepo = r;
+    view = "diff";
+    diffFiles = await taskDiff(selected.id, r);
+  }
+
+  function sendReview(comments: PendingComment[]) {
+    if (!selected) return;
+    const fence = "```";
+    const parts = comments.map(
+      (c) =>
+        `**${diffRepo}/${c.file}:${c.from}${c.to !== c.from ? `–${c.to}` : ""}**\n${fence}\n${c.code}\n${fence}\n${c.text}`,
+    );
+    const msg = `Ревью изменений (${comments.length} комм.):\n\n${parts.join("\n\n")}\n\nПоправь по комментариям.`;
+    view = "thread";
+    if (th(selected.id).running) th(selected.id).queue.push(msg);
+    else fire(selected.id, msg);
+  }
 
   function revealCurrent() {
     if (!project) return;
@@ -244,6 +272,10 @@
         e.preventDefault();
         goHub();
       }
+      if (e.metaKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        if (selected) view === "diff" ? (view = "thread") : openDiff();
+      }
       if (e.metaKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         palQ = "";
@@ -311,6 +343,8 @@
   function pick(t: Task, p: Project) {
     selected = t;
     projectId = p.id;
+    view = "thread";
+    diffRepo = null;
     // restore the conversation from the engine transcript on first open
     const st = th(t.id);
     if (st.items.length === 0 && !st.running) {
@@ -556,7 +590,23 @@
           <span class="branch">{selected.branch}</span>
         {/if}
         <Badge status={cur.running ? "running" : selected.status} />
+        <span class="tabs2">
+          <button class="tab2" class:on={view === "thread"} onclick={() => (view = "thread")}>Тред</button>
+          <button class="tab2" class:on={view === "diff"} onclick={() => openDiff()}>Изменения</button>
+        </span>
       </div>
+      {#if view === "diff"}
+        <div class="diff-toolbar">
+          {#if ctx}
+            {#each ctx.touched as r (r.repo)}
+              <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
+                {r.repo} <DiffStat add={r.add} del={r.del} />
+              </button>
+            {/each}
+          {/if}
+        </div>
+        <DiffView files={diffFiles} repo={diffRepo ?? ""} onsend={sendReview} />
+      {:else}
       <div class="thread-box" bind:this={threadBox}>
         {#if cur.items.length === 0}
           <div class="center-empty">
@@ -591,6 +641,8 @@
           {/each}
         {/if}
       </div>
+      {/if}
+      {#if view === "thread"}
       <div class="composer">
         <div class="c-inner glass-rim">
           <textarea
@@ -627,6 +679,7 @@
           </div>
         </div>
       </div>
+      {/if}
     {:else}
       <div class="hub">
         <p class="hub-greet">{greet()}</p>
@@ -682,13 +735,13 @@
       <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
       {#if ctx && ctx.touched.length}
         {#each ctx.touched as r (r.repo)}
-          <div class="repo">
+          <button class="repo repo-btn" onclick={() => openDiff(r.repo)} data-tip="Открыть дифф" aria-label="Открыть дифф">
             <div class="rn">{r.repo}</div>
             <div class="rrow">
               <span class="mut">✎ {r.files}</span>
               <DiffStat add={r.add} del={r.del} />
             </div>
-          </div>
+          </button>
         {/each}
       {:else}
         <p class="mut" style="margin:4px 2px">пока без изменений</p>
@@ -870,6 +923,24 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
+  .tabs2 { margin-left: auto; display: inline-flex; gap: 2px; background: var(--surface-1); border-radius: 999px; padding: 2px; }
+  .tab2 {
+    border: 0; background: transparent; cursor: pointer;
+    font: 500 12px var(--font-ui); color: var(--text-secondary);
+    padding: 3px 12px; border-radius: 999px;
+    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
+  }
+  .tab2.on { background: var(--surface-3); color: var(--text-primary); }
+  .diff-toolbar { display: flex; gap: 6px; padding: 10px 16px 0; flex-wrap: wrap; }
+  .repo-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface-1); border: 0; border-radius: 999px;
+    font: 500 12px var(--font-mono); color: var(--text-secondary);
+    padding: 4px 12px; cursor: pointer;
+  }
+  .repo-chip.on { background: var(--accent-soft); color: var(--text-primary); }
+  .repo-btn { width: 100%; border: 0; text-align: left; cursor: pointer; }
+  .repo-btn:hover { background: var(--surface-3); }
   .skel {
     display: inline-block;
     border-radius: 6px;

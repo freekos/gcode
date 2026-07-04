@@ -8,6 +8,7 @@
 pub mod actor;
 pub mod archive;
 pub mod context;
+pub mod diff;
 pub mod domain;
 pub mod engine;
 pub mod error;
