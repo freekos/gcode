@@ -107,13 +107,15 @@
             {#each f.hunks as h, hi (hi)}
               <div class="hh">{h.header}</div>
               {#each h.lines as l, li (li)}
-                <div class="dl {l.kind}" class:sel={inSelection(f.path, lineNo(l))}>
-                  <button
-                    class="plus"
-                    data-tip="Комментировать (shift — диапазон)"
-                    aria-label="Комментировать строку"
-                    onclick={(e) => clickLine(f.path, lineNo(l), e)}
-                  >+</button>
+                <div
+                  class="dl {l.kind}"
+                  class:sel={inSelection(f.path, lineNo(l))}
+                  role="button"
+                  tabindex="-1"
+                  onclick={(e) => clickLine(f.path, lineNo(l), e)}
+                  onkeydown={() => {}}
+                >
+                  <span class="plus" aria-hidden="true">+</span>
                   <span class="no">{l.old_no ?? ""}</span>
                   <span class="no">{l.new_no ?? ""}</span>
                   <span class="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span>
@@ -199,9 +201,12 @@
   .dl.del .txt { color: var(--diff-del); }
   /* GitHub-style: a blue "+" appears in the gutter on hover — the row itself
      is plain text (selectable); selection is a soft merged band, not per-row rings */
+  .dl { cursor: pointer; }
   .plus {
     visibility: hidden;
-    border: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 4px;
     background: var(--accent);
     color: var(--on-accent);
@@ -210,8 +215,6 @@
     width: 16px;
     height: 16px;
     align-self: center;
-    cursor: pointer;
-    padding: 0;
   }
   .dl:hover .plus { visibility: visible; }
   .dl.sel {

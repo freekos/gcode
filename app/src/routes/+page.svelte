@@ -80,7 +80,7 @@
   let upd: UpdateInfo | undefined = $state();
   let updOpen = $state(false);
   let helpOpen = $state(false);
-  let view: "thread" | "diff" = $state("thread");
+  let diffOpen = $state(false);
   let diffRepo: string | null = $state(null);
   let diffFiles: DiffFile[] = $state([]);
 
@@ -89,7 +89,7 @@
     const r = repo ?? diffRepo ?? ctx?.touched[0]?.repo;
     if (!r) return;
     diffRepo = r;
-    view = "diff";
+    diffOpen = true;
     diffFiles = await taskDiff(selected.id, r);
   }
 
@@ -101,7 +101,7 @@
         `**${diffRepo}/${c.file}:${c.from}${c.to !== c.from ? `–${c.to}` : ""}**\n${fence}\n${c.code}\n${fence}\n${c.text}`,
     );
     const msg = `Ревью изменений (${comments.length} комм.):\n\n${parts.join("\n\n")}\n\nПоправь по комментариям.`;
-    view = "thread";
+    diffOpen = false;
     if (th(selected.id).running) th(selected.id).queue.push(msg);
     else fire(selected.id, msg);
   }
@@ -296,7 +296,7 @@
       }
       if (e.metaKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        if (selected) view === "diff" ? (view = "thread") : openDiff();
+        if (selected) diffOpen ? (diffOpen = false) : openDiff();
       }
       if (e.metaKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -365,7 +365,7 @@
   function pick(t: Task, p: Project) {
     selected = t;
     projectId = p.id;
-    view = "thread";
+    diffOpen = false;
     diffRepo = null;
     // restore the conversation from the engine transcript on first open
     const st = th(t.id);
@@ -423,7 +423,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout" class:with-ctx={!!selected} style="--sbw:{sbw}px">
+<div class="layout" class:with-ctx={!!selected} class:diff-wide={diffOpen} style="--sbw:{sbw}px">
   <aside>
     <div class="drag-strip" data-tauri-drag-region>
       {#if upd}
@@ -577,7 +577,6 @@
   </aside>
 
   <div class="card glass-rim">
-    <div class="card-drag" data-tauri-drag-region></div>
     <div class="card-actions">
       <button class="iconbtn" data-tip={selected ? "Открыть задачу в Finder" : "Открыть проект в Finder"} aria-label="Открыть в Finder" onclick={revealCurrent}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
@@ -603,7 +602,7 @@
         <p>Готовлю worktrees…</p>
       </div>
     {:else if selected}
-      <div class="thread-head">
+      <div class="thread-head" data-tauri-drag-region>
         {#if naming.has(selected.id)}
           <b>{selected.title}</b>
           <span class="skel skel-pill" data-tip="ИИ придумывает имя и ветку" aria-label="Имя генерится"></span>
@@ -612,23 +611,7 @@
           <span class="branch">{selected.branch}</span>
         {/if}
         <Badge status={cur.running ? "running" : selected.status} />
-        <span class="tabs2">
-          <button class="tab2" class:on={view === "thread"} onclick={() => (view = "thread")}>Тред</button>
-          <button class="tab2" class:on={view === "diff"} onclick={() => openDiff()}>Изменения</button>
-        </span>
       </div>
-      {#if view === "diff"}
-        <div class="diff-toolbar">
-          {#if ctx}
-            {#each ctx.touched as r (r.repo)}
-              <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
-                {r.repo} <DiffStat add={r.add} del={r.del} />
-              </button>
-            {/each}
-          {/if}
-        </div>
-        <DiffView files={diffFiles} repo={diffRepo ?? ""} onsend={sendReview} />
-      {:else}
       <div class="thread-box" bind:this={threadBox}>
         {#if cur.items.length === 0}
           <div class="center-empty">
@@ -665,8 +648,6 @@
           {/each}
         {/if}
       </div>
-      {/if}
-      {#if view === "thread"}
       <div class="composer">
         <div class="c-inner glass-rim">
           <textarea
@@ -703,7 +684,6 @@
           </div>
         </div>
       </div>
-      {/if}
     {:else}
       <div class="hub">
         <p class="hub-greet">{greet()}</p>
@@ -754,7 +734,24 @@
       </div>
     {/if}
   </main>
-  {#if selected}
+  {#if selected && diffOpen}
+    <aside class="ctx ctx-diff">
+      <div class="dp-head">
+        <div class="diff-toolbar" style="padding:0">
+          {#if ctx}
+            {#each ctx.touched as r (r.repo)}
+              <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
+                {r.repo} <DiffStat add={r.add} del={r.del} />
+              </button>
+            {/each}
+          {/if}
+        </div>
+        <span style="flex:1"></span>
+        <button class="iconbtn" data-tip="Закрыть · ⌘D" aria-label="Закрыть дифф" onclick={() => (diffOpen = false)}>✕</button>
+      </div>
+      <DiffView files={diffFiles} repo={diffRepo ?? ""} onsend={sendReview} />
+    </aside>
+  {:else if selected}
     <aside class="ctx">
       <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
       {#if ctx && ctx.touched.length}
@@ -845,6 +842,7 @@
     height: 100%;
   }
   .with-ctx .card { grid-template-columns: 1fr 230px; }
+  .diff-wide .card { grid-template-columns: 1fr minmax(460px, 44%); }
   .card { position: relative; }
   .card-actions {
     position: absolute;
@@ -853,15 +851,6 @@
     z-index: 30;
     display: inline-flex;
     gap: 4px;
-  }
-  /* drag the window by the card's top band (buttons sit above at z30) */
-  .card-drag {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 44px;
-    z-index: 20;
   }
   .help-wrap { position: relative; }
   .help-menu { top: 30px; right: 0; left: auto; min-width: 210px; }
@@ -947,14 +936,6 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
-  .tabs2 { margin-left: auto; display: inline-flex; gap: 2px; background: var(--surface-1); border-radius: 999px; padding: 2px; }
-  .tab2 {
-    border: 0; background: transparent; cursor: pointer;
-    font: 500 12px var(--font-ui); color: var(--text-secondary);
-    padding: 3px 12px; border-radius: 999px;
-    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
-  }
-  .tab2.on { background: var(--surface-3); color: var(--text-primary); }
   .diff-toolbar { display: flex; gap: 6px; padding: 10px 16px 0; flex-wrap: wrap; }
   .repo-chip {
     display: inline-flex; align-items: center; gap: 8px;
