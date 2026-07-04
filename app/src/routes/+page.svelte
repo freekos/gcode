@@ -418,12 +418,18 @@
       {/each}
     {/if}
     <div class="sb-bottom">
-      <button class="newtask" style="margin:0" title="Настройки · ⌘, (скоро)">
-        <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
-        Настройки
+      <button class="user" title="Вход через Google — скоро · gcode 0.1">
+        <span class="avatar">G</span>
+        <span class="uname">Газиз</span>
+        {#if isDemo}<span class="demo">demo</span>{/if}
       </button>
-      {#if isDemo}<span class="demo">demo</span>{/if}
-      <span class="tok" style="margin-left:auto">0.1</span>
+      <span style="flex:1"></span>
+      <button class="iconbtn" title="Remote-доступ с телефона (Telegram) — фаза 10">
+        <svg class="ic" viewBox="0 0 16 16"><rect x="4.6" y="1.8" width="6.8" height="12.4" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M7 12.4h2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      </button>
+      <button class="iconbtn" title="Настройки · ⌘, (скоро)">
+        <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 1.6v2.1M8 12.3v2.1M1.6 8h2.1M12.3 8h2.1M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5 11 5M5 11l-1.5 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      </button>
     </div>
     <div class="sb-resize" role="separator" aria-orientation="vertical" aria-label="Ширина сайдбара" onpointerdown={startResize}></div>
   </aside>
@@ -715,16 +721,40 @@
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
-  .drag-strip { height: 34px; flex: none; margin: -12px -12px 0; }
+  .drag-strip { height: 44px; flex: none; margin: -12px -12px 0; }
   .sb-bottom {
     margin-top: auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     padding-top: 8px;
     border-top: 1px solid var(--border-subtle);
   }
-  .tok { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+  .user {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--r-md);
+    color: var(--text-primary);
+    font: 600 12.5px var(--font-ui);
+  }
+  .user:hover { background: var(--surface-2); }
+  .avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: oklch(58% 0.15 40);
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: 700 12px var(--font-ui);
+  }
+  .uname { letter-spacing: 0.01em; }
   .ic { width: 15px; height: 15px; color: var(--text-muted); flex: none; }
   .newtask:hover .ic { color: var(--text-secondary); }
   .hub {
