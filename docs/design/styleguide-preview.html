@@ -346,11 +346,11 @@
   <section>
     <div class="eyebrow">05 · Создание задачи</div>
     <h2>Ты пишешь «что сделать» — имя придумает ИИ</h2>
-    <p class="sub">⌘N — <b>глобальная модалка</b>: работает из любого места приложения (проект выбирается в ней же). Одно поле — промпт. Никаких «введите название»: slug и заголовок генерятся, репо по умолчанию все (Tab — выбрать). Так же глобальны ⌘K палитра, ⌘O ops, ⌘J ассистент — действуешь отовсюду.</p>
+    <p class="sub">⌘N — <b>глобальная модалка</b>: работает из любого места приложения (проект выбирается в ней же). Одно поле — промпт, и всё: имя придумает ИИ, worktree создаются на ВСЕ репо проекта — выбирать и думать об этом не нужно (в панели задачи видны только тронутые). Закрыл случайно — черновик сохранён, ⌘N вернёт текст. Так же глобальны ⌘K палитра, ⌘O ops, ⌘J ассистент.</p>
     <div class="composer" style="max-width:560px">
       <textarea placeholder="Что сделать? Например: почини редирект после логина, ломается на вебвью">почини редирект после логина, ломается на вебвью</textarea>
       <div class="bar">
-        <span class="tok">репо: все (Tab — выбрать)</span>
+        <span class="tok">worktrees: все репо проекта · черновик сохраняется</span>
         <div class="spacer"></div>
         <button class="btn primary">Создать ⏎</button>
       </div>
@@ -514,9 +514,10 @@
           </div>
         </div>
         <div class="ctx">
-          <h4>Worktrees</h4>
+          <h4>Worktrees · тронутые</h4>
           <div class="repo"><div class="rn">server</div><div class="row2" style="display:flex;gap:8px"><span class="tok">✎ 3 файла</span><span class="diffstat mono" style="font-size:11px"><span class="add">+49</span> <span class="del">−2</span></span></div></div>
           <div class="repo"><div class="rn">crm</div><div class="row2" style="display:flex;gap:8px"><span class="tok">✎ 1 файл</span><span class="diffstat mono" style="font-size:11px"><span class="add">+12</span> <span class="del">−1</span></span></div></div>
+          <div class="tok" style="margin:2px 0 0 2px">ещё 3 репо не тронуты ›</div>
           <h4 style="margin-top:14px">Goal · 3/4 <span style="letter-spacing:0;text-transform:none">· из PROGRESS.md</span></h4>
           <ul class="goal" style="margin:0;padding-left:16px">
             <li class="done">найти причину редиректа</li>
