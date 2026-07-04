@@ -44,7 +44,7 @@
   import Editor from "$lib/components/Editor.svelte";
   import FileTree from "$lib/components/FileTree.svelte";
 
-  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review"; text: string };
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped"; text: string };
   type ThreadState = {
     items: ThreadItem[];
     running: boolean;
@@ -88,10 +88,11 @@
   function startCtxResize(e: PointerEvent) {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = diffOpen ? diffw : ctxw;
+    const wide = diffOpen || editorOpen;
+    const startW = wide ? diffw : ctxw;
     const move = (ev: PointerEvent) => {
       const w = startW + (startX - ev.clientX);
-      if (diffOpen) diffw = Math.min(Math.round(window.innerWidth * 0.6), Math.max(460, w));
+      if (wide) diffw = Math.min(Math.round(window.innerWidth * 0.6), Math.max(460, w));
       else ctxw = Math.min(420, Math.max(210, w));
     };
     const up = () => {
@@ -136,6 +137,7 @@
     editorPath = path;
     diffOpen = false;
     editorOpen = true;
+    if (fileList.length === 0) fileList = await filesList(selected.id);
   }
 
   async function openProjectFile(rel: string) {
@@ -373,6 +375,7 @@
       t.items.push({ kind: "tool", text: e.text });
     } else if (e.kind === "done") {
       t.running = false;
+      const wasStopped = stopRequested || e.text === "остановлено";
       stopRequested = false;
       if (t.turnStart) {
         const sec = Math.round((Date.now() - t.turnStart) / 1000);
@@ -380,7 +383,10 @@
         t.items.push({ kind: "turn", text: dur });
         t.turnStart = undefined;
       }
-      if (e.ok === false) t.items.push({ kind: "error", text: e.text || "агент завершился с ошибкой" });
+      if (e.ok === false) {
+        if (wasStopped) t.items.push({ kind: "stopped", text: "" });
+        else t.items.push({ kind: "error", text: e.text || "агент завершился с ошибкой" });
+      }
       loadCtx();
       const next = t.queue.shift();
       if (next) fire(e.task_id, next);
@@ -849,6 +855,8 @@
                   </div>
                 {/each}
               </div>
+            {:else if b.item.kind === "stopped"}
+              <div class="m-stop">⏹ Остановлено</div>
             {:else if b.item.kind === "turn"}
               <div class="m-turn"><span>Работал {b.item.text}</span><span class="tline"></span></div>
             {:else}
@@ -953,10 +961,25 @@
   {#if editorOpen}
     <aside class="ctx ctx-diff">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
+      <div class="ed-split">
+        {#if editorScope === "task" && selected}
+          <div class="ed-tree">
+            <div class="grp" style="margin:4px 8px 6px">Файлы задачи</div>
+            {#each fileList as f (f)}
+              {@const [r, ...rest] = f.split("/")}
+              <button
+                class="ed-file"
+                class:on={r === editorRepo && rest.join("/") === editorPath}
+                onclick={() => openEditor(r, rest.join("/"))}
+              >{f}</button>
+            {/each}
+          </div>
+        {/if}
       {#key `${editorRepo}/${editorPath}`}
         <Editor
           content={editorContent}
           path={editorPath}
+          label={editorScope === "task" ? `${editorRepo}/${editorPath}` : editorPath}
           onsave={saveEditor}
           onquote={selected
             ? (from, to, code) =>
@@ -967,6 +990,7 @@
             : undefined}
         />
       {/key}
+      </div>
     </aside>
   {:else if selected && diffOpen}
     <aside class="ctx ctx-diff">
@@ -1584,6 +1608,33 @@
     overflow-x: auto;
     margin: 4px 0 0;
   }
+  .m-stop { color: var(--text-muted); font-size: 12px; }
+  .ed-split { display: flex; flex: 1; min-height: 0; }
+  .ed-split :global(.ed-wrap) { flex: 1; min-width: 0; }
+  .ed-tree {
+    width: 200px;
+    flex: none;
+    overflow-y: auto;
+    border-right: 1px solid var(--border-subtle);
+    padding: 4px;
+  }
+  .ed-file {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font: 11.5px var(--font-mono);
+    text-align: left;
+    padding: 3.5px 8px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ed-file:hover { background: var(--surface-2); color: var(--text-primary); }
+  .ed-file.on { background: var(--accent-soft); color: var(--text-primary); }
   .m-turn {
     display: flex;
     align-items: center;

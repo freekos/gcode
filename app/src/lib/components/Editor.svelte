@@ -11,11 +11,13 @@
   let {
     content,
     path,
+    label,
     onsave,
     onquote,
   }: {
     content: string;
     path: string; // used for language detection
+    label?: string; // full display path (repo/path for task files)
     onsave: (text: string) => void;
     onquote?: (from: number, to: number, code: string) => void;
   } = $props();
@@ -129,7 +131,7 @@
 
 <div class="ed-wrap">
   <div class="ed-bar">
-    <span class="mono">{path}</span>
+    <span class="mono">{label ?? path}</span>
     {#if dirty}<span class="dot" data-tip="Есть несохранённые правки · ⌘S" aria-label="Не сохранено"></span>{/if}
     <span class="grow"></span>
     <span class="hint">⌘S — сохранить{#if onquote} · ⌘L — в промпт{/if}</span>
