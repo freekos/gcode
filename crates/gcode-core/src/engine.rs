@@ -22,6 +22,9 @@ pub enum AgentEvent {
     WholeText(String),
     /// The agent invoked a tool (informational).
     ToolUse(String),
+    /// Subscription window info (honest facts only: window kind + reset time;
+    /// the headless stream does NOT carry used percentages).
+    RateLimit { kind: String, resets_at: i64 },
     /// The run finished. `ok=false` means the engine reported an error.
     Done { ok: bool, error: Option<String> },
 }
@@ -178,6 +181,16 @@ pub fn parse_line(line: &str) -> Vec<AgentEvent> {
             }
             out
         }
+        "rate_limit_event" => {
+            let info = &v["rate_limit_info"];
+            match (info["rateLimitType"].as_str(), info["resetsAt"].as_i64()) {
+                (Some(k), Some(t)) => vec![AgentEvent::RateLimit {
+                    kind: k.to_string(),
+                    resets_at: t,
+                }],
+                _ => vec![],
+            }
+        }
         "result" => {
             let ok = !v["is_error"].as_bool().unwrap_or(false);
             let error = v["result"].as_str().filter(|_| !ok).map(|s| s.to_string());
@@ -246,8 +259,20 @@ mod tests {
     #[test]
     fn garbage_and_unknown_events_are_ignored() {
         assert!(parse_line("not json at all").is_empty());
-        assert!(parse_line(r#"{"type":"rate_limit_event","foo":1}"#).is_empty());
+        assert!(
+            parse_line(r#"{"type":"rate_limit_event","foo":1}"#).is_empty(),
+            "malformed limit event ignored"
+        );
         assert!(parse_line(r#"{"type":"system","subtype":"status"}"#).is_empty());
+    }
+
+    #[test]
+    fn real_stream_surfaces_rate_limit_window() {
+        let evs = events();
+        assert!(
+            evs.iter().any(|e| matches!(e, AgentEvent::RateLimit { kind, resets_at } if kind == "five_hour" && *resets_at > 0)),
+            "the real fixture contains a five_hour rate_limit_event"
+        );
     }
 
     #[test]

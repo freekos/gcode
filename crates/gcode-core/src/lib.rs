@@ -7,6 +7,7 @@
 
 pub mod actor;
 pub mod archive;
+pub mod context;
 pub mod domain;
 pub mod engine;
 pub mod error;

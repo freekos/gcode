@@ -79,9 +79,32 @@ export async function onTasksChanged(cb: () => void): Promise<() => void> {
 
 export interface ThreadEvent {
   task_id: number;
-  kind: "delta" | "tool" | "done";
+  kind: "delta" | "tool" | "limit" | "done";
   text: string;
   ok: boolean | null;
+  resets_at?: number | null;
+}
+
+export interface RepoChange { repo: string; files: number; add: number; del: number; }
+export interface ProgressItem { text: string; done: boolean; }
+export interface TaskContext { touched: RepoChange[]; untouched: number; progress: ProgressItem[]; }
+
+export async function taskContext(taskId: number): Promise<TaskContext> {
+  if (!inTauri) {
+    return {
+      touched: [
+        { repo: "server", files: 3, add: 49, del: 2 },
+        { repo: "crm", files: 1, add: 12, del: 1 },
+      ],
+      untouched: 2,
+      progress: [
+        { text: "найти причину редиректа", done: true },
+        { text: "исправить auth.ts", done: true },
+        { text: "тест на webview-куку", done: false },
+      ],
+    };
+  }
+  return invoke<TaskContext>("task_context", { taskId });
 }
 
 export async function threadSend(taskId: number, prompt: string): Promise<void> {
@@ -90,6 +113,7 @@ export async function threadSend(taskId: number, prompt: string): Promise<void> 
     const chunks = ["Смотрю код… ", "нашёл причину: ", "редирект собирался без webview-куки. ", "Исправил и добавил тест."];
     const fire = (detail: ThreadEvent, delay: number) =>
       setTimeout(() => window.dispatchEvent(new CustomEvent("demo-thread-event", { detail })), delay);
+    fire({ task_id: taskId, kind: "limit", text: "five_hour", ok: null, resets_at: Math.floor(Date.now() / 1000) + 7200 }, 300);
     fire({ task_id: taskId, kind: "tool", text: "Read", ok: null }, 500);
     chunks.forEach((c, i) => fire({ task_id: taskId, kind: "delta", text: c, ok: null }, 900 + i * 500));
     fire({ task_id: taskId, kind: "tool", text: "Edit", ok: null }, 1600);

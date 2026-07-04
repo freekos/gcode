@@ -151,9 +151,10 @@ fn task_create(
 #[derive(Serialize, Clone)]
 struct ThreadEvent {
     task_id: i64,
-    kind: String, // "delta" | "tool" | "done"
+    kind: String, // "delta" | "tool" | "limit" | "done"
     text: String,
     ok: Option<bool>,
+    resets_at: Option<i64>,
 }
 
 /// Send a message to the task's agent (new thread or continue the latest one).
@@ -189,18 +190,28 @@ fn thread_send(
                         kind: "delta".into(),
                         text: t.clone(),
                         ok: None,
+                        resets_at: None,
                     },
                     AgentEvent::ToolUse(n) => ThreadEvent {
                         task_id,
                         kind: "tool".into(),
                         text: n.clone(),
                         ok: None,
+                        resets_at: None,
+                    },
+                    AgentEvent::RateLimit { kind, resets_at } => ThreadEvent {
+                        task_id,
+                        kind: "limit".into(),
+                        text: kind.clone(),
+                        ok: None,
+                        resets_at: Some(*resets_at),
                     },
                     AgentEvent::Done { ok, error } => ThreadEvent {
                         task_id,
                         kind: "done".into(),
                         text: error.clone().unwrap_or_default(),
                         ok: Some(*ok),
+                    resets_at: None,
                     },
                     AgentEvent::Session(_) => return,
                 };
@@ -215,12 +226,18 @@ fn thread_send(
                     kind: "done".into(),
                     text: e.to_string(),
                     ok: Some(false),
+                    resets_at: None,
                 },
             );
         }
         let _ = app_handle.emit("tasks-changed", serde_json::json!({ "ok": true }));
     });
     Ok(())
+}
+
+#[tauri::command]
+fn task_context(app: TState<'_, App>, task_id: i64) -> Result<gcode_core::context::TaskContext, String> {
+    gcode_core::context::task_context(&app.handle, task_id).map_err(err_s)
 }
 
 #[tauri::command]
@@ -251,6 +268,7 @@ pub fn run() {
             tasks_list,
             task_create,
             thread_send,
+            task_context,
             task_set_status
         ])
         .run(tauri::generate_context!())

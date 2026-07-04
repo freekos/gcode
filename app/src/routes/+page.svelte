@@ -13,10 +13,13 @@
     onThreadEvent,
     onTasksChanged,
     isDemo,
+    taskContext,
     type Project,
     type Task,
     type ThreadEvent,
+    type TaskContext,
   } from "$lib/api";
+  import DiffStat from "$lib/components/DiffStat.svelte";
 
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error"; text: string };
   type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[] };
@@ -33,6 +36,10 @@
 
   // per-task thread view state (history persistence comes later — engine owns transcripts)
   let threads: Record<number, ThreadState> = $state({});
+  let ctx: TaskContext | undefined = $state();
+  let limit: { kind: string; resetsAt: number } | undefined = $state();
+  let paletteOpen = $state(false);
+  let palQ = $state("");
   let msg = $state("");
   let threadBox: HTMLElement | undefined = $state();
 
@@ -43,6 +50,14 @@
     return threads[id];
   }
   const EMPTY: ThreadState = { items: [], running: false, queue: [] };
+  $effect(() => {
+    if (selected) loadCtx();
+  });
+
+  function fmtReset(ts: number): string {
+    const d = new Date(ts * 1000);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
   const cur = $derived(selected ? (threads[selected.id] ?? EMPTY) : EMPTY);
 
   function scrollDown() {
@@ -68,8 +83,16 @@
     threadSend(taskId, prompt);
   }
 
+  async function loadCtx() {
+    if (selected) ctx = await taskContext(selected.id);
+  }
+
   function onEvent(e: ThreadEvent) {
     const t = th(e.task_id);
+    if (e.kind === "limit") {
+      if (e.resets_at) limit = { kind: e.text, resetsAt: e.resets_at };
+      return;
+    }
     if (e.kind === "delta") {
       const last = t.items[t.items.length - 1];
       if (last?.kind === "agent") last.text += e.text;
@@ -79,6 +102,7 @@
     } else if (e.kind === "done") {
       t.running = false;
       if (e.ok === false) t.items.push({ kind: "error", text: e.text || "агент завершился с ошибкой" });
+      loadCtx();
       const next = t.queue.shift();
       if (next) fire(e.task_id, next);
     }
@@ -115,6 +139,11 @@
         e.preventDefault();
         createOpen = true;
       }
+      if (e.metaKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        palQ = "";
+        paletteOpen = true;
+      }
       if (e.metaKey && /^[1-9]$/.test(e.key)) {
         e.preventDefault();
         const t = ordered[Number(e.key) - 1];
@@ -150,7 +179,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout">
+<div class="layout" class:with-ctx={!!selected}>
   <aside>
     <div class="proj">
       <span class="pname">{project?.name ?? "—"}</span>
@@ -239,6 +268,12 @@
           <span style="flex:1"></span>
           <Button variant="primary" onclick={sendMsg}>{cur.running ? "В очередь" : "Отправить"} ⏎</Button>
         </div>
+        <div class="e-bar">
+          <span class="engine">◆ Claude</span>
+          {#if limit}
+            <span class="mut mono-s">↻ {limit.kind === "five_hour" ? "5h" : limit.kind} · сброс {fmtReset(limit.resetsAt)}</span>
+          {/if}
+        </div>
       </div>
     {:else}
       <div class="center-empty">
@@ -247,7 +282,57 @@
       </div>
     {/if}
   </main>
+  {#if selected}
+    <aside class="ctx">
+      <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
+      {#if ctx && ctx.touched.length}
+        {#each ctx.touched as r (r.repo)}
+          <div class="repo">
+            <div class="rn">{r.repo}</div>
+            <div class="rrow">
+              <span class="mut">✎ {r.files}</span>
+              <DiffStat add={r.add} del={r.del} />
+            </div>
+          </div>
+        {/each}
+      {:else}
+        <p class="mut" style="margin:4px 2px">пока без изменений</p>
+      {/if}
+      {#if ctx && ctx.untouched}
+        <p class="mut" style="margin:4px 2px">ещё {ctx.untouched} не тронуты ›</p>
+      {/if}
+
+      {#if ctx && ctx.progress.length}
+        <div class="grp">Goal · из PROGRESS.md</div>
+        <ul class="goal">
+          {#each ctx.progress as p, i (i)}
+            <li class:done={p.done}>{p.text}</li>
+          {/each}
+        </ul>
+      {/if}
+    </aside>
+  {/if}
 </div>
+
+<Modal bind:open={paletteOpen} width="480px">
+  <input
+    class="pal-input"
+    placeholder="Команда или задача…"
+    bind:value={palQ}
+  />
+  <div class="pal-list">
+    {#each [
+      { label: "Новая задача", hint: "⌘N", act: () => { paletteOpen = false; createOpen = true; } },
+      { label: "Styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
+      ...ordered.map((t) => ({ label: t.title, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
+    ].filter((c) => c.label.toLowerCase().includes(palQ.toLowerCase())) as c (c.label)}
+      <button class="pal-item" onclick={c.act}>
+        <span>{c.label}</span>
+        {#if c.hint}<Kbd keys={c.hint} />{/if}
+      </button>
+    {/each}
+  </div>
+</Modal>
 
 <Modal bind:open={createOpen} width="560px">
   <h3>Новая задача{project ? ` · ${project.name}` : ""}</h3>
@@ -275,6 +360,7 @@
     grid-template-columns: 260px 1fr;
     height: 100vh;
   }
+  .layout.with-ctx { grid-template-columns: 260px 1fr 230px; }
   aside {
     background: var(--surface-1);
     border-right: 1px solid var(--border-subtle);
@@ -353,5 +439,33 @@
   .composer textarea { margin-bottom: 0; }
   .c-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .queue-note { font-size: 11.5px; color: var(--status-running); }
+  .e-bar { display: flex; gap: 12px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
+  .engine {
+    font-size: 11.5px; color: var(--text-secondary);
+    background: var(--surface-2); border: 1px solid var(--border-subtle);
+    border-radius: 999px; padding: 2px 10px;
+  }
+  .mono-s { font-family: var(--font-mono); font-size: 11px; }
+  .ctx { background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; overflow-y: auto; }
+  .repo { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px; }
+  .rn { font-family: var(--font-mono); font-size: 11.5px; }
+  .rrow { display: flex; gap: 10px; margin-top: 3px; align-items: center; }
+  .goal { margin: 4px 0 0; padding-left: 18px; }
+  .goal li { color: var(--text-secondary); margin: 3px 0; font-size: 12.5px; }
+  .goal li.done { color: var(--text-muted); text-decoration: line-through; }
+  .pal-input {
+    width: 100%; font: 14px var(--font-ui); color: var(--text-primary);
+    background: var(--surface-2); border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md); padding: 9px 12px; margin-bottom: 10px;
+  }
+  .pal-input:focus { outline: none; border-color: var(--accent); }
+  .pal-list { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; }
+  .pal-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: transparent; border: 0; color: var(--text-primary);
+    font: 13px var(--font-ui); padding: 8px 10px; border-radius: var(--r-md);
+    cursor: pointer; text-align: left;
+  }
+  .pal-item:hover { background: var(--surface-2); }
   h3 { margin: 0 0 4px; font-size: 15px; }
 </style>

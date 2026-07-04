@@ -199,3 +199,30 @@ fn remove_worktrees_frees_disk_but_keeps_branches() {
     let branches = git_out(&server, &["branch", "--list", "to-archive"]);
     assert!(branches.contains("to-archive"), "branch kept: {branches}");
 }
+
+#[test]
+fn task_context_reports_touched_repos_and_progress() {
+    use gcode_core::context::task_context;
+    let (h, q, _tmp) = setup();
+    let res = provision_task(&h, &q, "azi", "Context probe", &[]).unwrap();
+    // dirty one repo
+    std::fs::write(res.root.join("server").join("new.rs"), "fn x() {}\n").unwrap();
+    // agent-maintained progress
+    std::fs::write(
+        res.root.join("PROGRESS.md"),
+        "- [x] понять\n- [ ] сделать\n",
+    )
+    .unwrap();
+
+    let ctx = task_context(&h, res.task.id).unwrap();
+    assert_eq!(
+        ctx.touched.len(),
+        1,
+        "only the dirty repo is touched: {ctx:?}"
+    );
+    assert_eq!(ctx.touched[0].repo, "server");
+    assert!(ctx.touched[0].files >= 1);
+    assert_eq!(ctx.untouched, 1, "crm untouched");
+    assert_eq!(ctx.progress.len(), 2);
+    assert!(ctx.progress[0].done);
+}
