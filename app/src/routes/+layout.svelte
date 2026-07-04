@@ -49,6 +49,7 @@
 </script>
 
 <div class="win-frame" data-tauri-drag-region></div>
+<div class="window-rim glass-rim" aria-hidden="true"></div>
 
 {#if fatal}
   <div class="fatal">
@@ -68,6 +69,17 @@
     right: 0;
     height: 22px;
     z-index: 0;
+  }
+  .window-rim {
+    display: none;
+  }
+  :global(:root.native) .window-rim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border-radius: 14px;
+    z-index: 998;
+    pointer-events: none;
   }
   .fatal {
     position: fixed;

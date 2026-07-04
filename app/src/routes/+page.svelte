@@ -396,7 +396,7 @@
           <svg class="ic" viewBox="0 0 16 16"><path d="M2.5 4.5h11M4.5 8h7M6.5 11.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         </button>
         {#if viewMenuOpen}
-          <div class="viewmenu" role="menu">
+          <div class="viewmenu glass-rim" role="menu">
             <div class="vm-sec">Вид</div>
             <button class="vm-item" onclick={() => (viewMenuOpen = false)}>
               По проектам <span class="vm-check">✓</span>
@@ -476,7 +476,7 @@
     <div class="sb-resize" role="separator" aria-orientation="vertical" aria-label="Ширина сайдбара" onpointerdown={startResize}></div>
   </aside>
 
-  <div class="card">
+  <div class="card glass-rim">
     <div class="card-actions">
       <button class="iconbtn" data-tip={selected ? "Открыть задачу в Finder" : "Открыть проект в Finder"} aria-label="Открыть в Finder" onclick={revealCurrent}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
@@ -486,7 +486,7 @@
           <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M6.3 6.2c.2-1 1-1.6 1.9-1.5.9 0 1.7.7 1.7 1.6 0 1.2-1.6 1.4-1.9 2.4v.5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".7" fill="currentColor"/></svg>
         </button>
         {#if helpOpen}
-          <div class="viewmenu help-menu" role="menu">
+          <div class="viewmenu help-menu glass-rim" role="menu">
             <button class="vm-item" onclick={() => { helpOpen = false; openUrl("https://github.com/freekos/gcode/issues/new?labels=bug"); }}>Сообщить об ошибке</button>
             <button class="vm-item" onclick={() => { helpOpen = false; openUrl("https://github.com/freekos/gcode/issues/new?labels=enhancement"); }}>Предложить фичу</button>
             <button class="vm-item" onclick={() => { helpOpen = false; openUrl("https://github.com/freekos/gcode#readme"); }}>Документация</button>
@@ -535,7 +535,7 @@
         {/if}
       </div>
       <div class="composer">
-        <div class="c-inner">
+        <div class="c-inner glass-rim">
           <textarea
             bind:value={msg}
             rows="2"
@@ -573,7 +573,7 @@
     {:else}
       <div class="hub">
         <p class="hub-greet">{greet()}</p>
-        <div class="hub-box">
+        <div class="hub-box glass-rim">
           <div class="hub-proj">
             <span class="proj-chip">
               <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
@@ -585,7 +585,7 @@
               <span class="chev2">⌄</span>
             </span>
           </div>
-          <div class="c-inner">
+          <div class="c-inner glass-rim">
             <textarea
               bind:this={hubTa}
               bind:value={hubPrompt}
@@ -726,7 +726,7 @@
     margin: 10px 14px 14px 0;
     height: calc(100vh - 24px);
     background: var(--surface-0);
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: 16px;
     overflow: hidden;
     box-shadow:
@@ -774,9 +774,9 @@
     z-index: 40;
     min-width: 190px;
     background: var(--surface-3);
-    border: 1px solid var(--border-strong);
+    border: 0;
     border-radius: var(--r-lg);
-    box-shadow: 0 16px 40px oklch(0% 0 0 / 0.45), inset 0 1px 0 var(--glass-highlight);
+    box-shadow: 0 16px 40px oklch(0% 0 0 / 0.45);
     padding: 6px;
   }
   .vm-sec {
@@ -900,7 +900,7 @@
   .hub-box {
     width: min(660px, 100%);
     background: var(--surface-1);
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: 18px;
     padding: 8px;
   }
@@ -909,7 +909,7 @@
   .hub-proj { margin: 4px 6px 8px; }
   .c-inner {
     background: var(--surface-2);
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: 12px;
     padding: 10px 10px 8px;
     box-shadow: inset 0 1px 0 var(--glass-highlight);
@@ -1001,10 +1001,21 @@
     gap: 8px;
     overflow-y: auto;
   }
-  /* native window: the sidebar sits directly on the vibrancy glass */
+  /* native window: liquid glass sidebar — vibrancy below + a soft white pour
+     that is brighter at the top, plus a gradient hairline on the right edge */
   :global(:root.native) aside {
-    background: transparent;
+    background: linear-gradient(180deg, oklch(100% 0 0 / 0.05), oklch(100% 0 0 / 0.012) 40%, oklch(100% 0 0 / 0.02));
     border-right: 0;
+  }
+  :global(:root.native) aside::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--glass-edge-top), var(--glass-edge-bottom) 60%, transparent);
+    pointer-events: none;
   }
   :global(:root.native) main { background: transparent; }
   .sb-resize {

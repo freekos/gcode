@@ -56,6 +56,33 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Liquid-glass rim: gradient edge that is brighter on top and fades down —
+   the flat 1px border reads "plastic", this reads "glass" (Apple 26 language).
+   Apply .glass-rim to any rounded container; the pseudo inherits its radius. */
+.glass-rim {
+  position: relative;
+}
+.glass-rim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    180deg,
+    var(--glass-edge-top),
+    var(--glass-edge-mid) 35%,
+    var(--glass-edge-bottom)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Focus policy: keyboard-only, neutral glass ring (blue rings read as web-page).
    Text fields keep their own quiet border highlight. */
 :focus {

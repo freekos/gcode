@@ -17,6 +17,9 @@
   --border-subtle: oklch(100% 0 0 / 0.07);
   --border-strong: oklch(100% 0 0 / 0.14);
   --glass-highlight: oklch(100% 0 0 / 0.05);
+  --glass-edge-top: oklch(100% 0 0 / 0.22);
+  --glass-edge-mid: oklch(100% 0 0 / 0.07);
+  --glass-edge-bottom: oklch(100% 0 0 / 0.03);
 
   /* text */
   --text-primary: oklch(93% 0.004 280);

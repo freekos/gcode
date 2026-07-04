@@ -29,6 +29,7 @@
 </script>
 
 <dialog
+  class="glass-rim"
   bind:this={el}
   style="width:min({width}, 94vw)"
   {onclick}
@@ -43,7 +44,7 @@
     margin: auto;
     background: var(--surface-3);
     color: var(--text-primary);
-    border: 1px solid var(--border-strong);
+    border: 0;
     border-radius: var(--r-xl);
     padding: 20px 22px;
     box-shadow: 0 24px 60px oklch(0% 0 0 / 0.5);
