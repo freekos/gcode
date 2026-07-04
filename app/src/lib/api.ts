@@ -28,13 +28,21 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 // ---- demo data (browser only) ----
-const demoProjects: Project[] = [{ id: 1, name: "azi", path: "~/Codebase/work/azi", repos: 4 }];
-let demoTasks: Task[] = [
-  { id: 1, title: "Почини редирект после логина", slug: "pochini-redirekt", branch: "pochini-redirekt", status: "review", archived: false },
-  { id: 2, title: "Добавь тесты на webview-куку", slug: "dobav-testy-webview", branch: "dobav-testy-webview", status: "running", archived: false },
-  { id: 3, title: "Разберись с ценой в KG", slug: "razberis-s-tsenoy", branch: "razberis-s-tsenoy", status: "needs_input", archived: false },
-  { id: 4, title: "Рефактор API клиента", slug: "refaktor-api", branch: "refaktor-api", status: "new", archived: false },
+const demoProjects: Project[] = [
+  { id: 1, name: "azi", path: "~/Codebase/work/azi", repos: 4 },
+  { id: 2, name: "invictus", path: "~/Codebase/work/invictus", repos: 12 },
 ];
+const demoTaskSets: Record<number, Task[]> = {
+  1: [
+    { id: 1, title: "Почини редирект после логина", slug: "fix-login-redirect", branch: "fix-login-redirect", status: "review", archived: false },
+    { id: 2, title: "Добавь тесты на webview-куку", slug: "add-webview-tests", branch: "add-webview-tests", status: "running", archived: false },
+    { id: 4, title: "Рефактор API клиента", slug: "refactor-api-client", branch: "refactor-api-client", status: "new", archived: false },
+  ],
+  2: [
+    { id: 3, title: "Разберись с ценой в KG", slug: "fix-kg-price", branch: "fix-kg-price", status: "needs_input", archived: false },
+    { id: 5, title: "Лендинг лояльности", slug: "loyalty-landing", branch: "loyalty-landing", status: "done", archived: false },
+  ],
+};
 let demoId = 5;
 
 export async function projectsList(): Promise<Project[]> {
@@ -48,16 +56,16 @@ export async function projectAdd(path: string): Promise<Project> {
 }
 
 export async function tasksList(projectId: number): Promise<Task[]> {
-  if (!inTauri) return demoTasks;
+  if (!inTauri) return demoTaskSets[projectId] ?? [];
   return invoke<Task[]>("tasks_list", { projectId });
 }
 
 export async function taskCreate(projectId: number, prompt: string): Promise<void> {
   if (!inTauri) {
     const slug = prompt.toLowerCase().slice(0, 24).replace(/[^a-zа-яё0-9]+/gi, "-");
-    demoTasks = [
+    demoTaskSets[projectId] = [
       { id: demoId++, title: prompt, slug, branch: slug, status: "new", archived: false },
-      ...demoTasks,
+      ...(demoTaskSets[projectId] ?? []),
     ];
     setTimeout(() => window.dispatchEvent(new CustomEvent("demo-tasks-changed")), 400);
     return;

@@ -24,10 +24,15 @@
   type ThreadItem = { kind: "user" | "agent" | "tool" | "error"; text: string };
   type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[] };
 
-  let projects: Project[] = $state([]);
-  let project: Project | undefined = $state();
-  let tasks: Task[] = $state([]);
+  type ProjectNode = { project: Project; tasks: Task[] };
+  let tree: ProjectNode[] = $state([]);
+  let project: Project | undefined = $state(); // context for ⌘N
   let selected: Task | undefined = $state();
+
+  const PRIORITY: Record<string, number> = { needs_input: 0, review: 1, running: 2, new: 3, done: 4 };
+  function sortTasks(ts: Task[]): Task[] {
+    return [...ts].sort((a, b) => (PRIORITY[a.status] ?? 9) - (PRIORITY[b.status] ?? 9));
+  }
 
   // ⌘N creation modal with a persistent draft (ui-inventory: drafts never die)
   let createOpen = $state(false);
@@ -109,17 +114,17 @@
     if (selected?.id === e.task_id) scrollDown();
   }
 
-  const attention = $derived(tasks.filter((t) => t.status === "needs_input" || t.status === "review"));
-  const working = $derived(tasks.filter((t) => t.status === "running"));
-  const rest = $derived(tasks.filter((t) => !["needs_input", "review", "running"].includes(t.status)));
-  const ordered = $derived([...attention, ...working, ...rest]);
+  const ordered = $derived(tree.flatMap((n) => n.tasks));
 
   async function reload() {
-    projects = await projectsList();
+    const projects = await projectsList();
+    tree = await Promise.all(
+      projects.map(async (p) => ({ project: p, tasks: sortTasks(await tasksList(p.id)) })),
+    );
     project = project ?? projects[0];
-    if (project) {
-      tasks = await tasksList(project.id);
-      if (selected) selected = tasks.find((t) => t.id === selected!.id) ?? selected;
+    if (selected) {
+      const all = tree.flatMap((n) => n.tasks);
+      selected = all.find((t) => t.id === selected!.id) ?? selected;
     }
   }
 
@@ -175,6 +180,11 @@
     const i = ordered.findIndex((x) => x.id === t.id);
     return i >= 0 && i < 9 ? `⌘${i + 1}` : undefined;
   }
+
+  function pick(t: Task, p: Project) {
+    selected = t;
+    project = p;
+  }
 </script>
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
@@ -182,34 +192,31 @@
 <div class="layout" class:with-ctx={!!selected}>
   <aside>
     <div class="proj">
-      <span class="pname">{project?.name ?? "—"}</span>
+      <span class="pname">g<b style="color:var(--accent)">code</b></span>
       {#if isDemo}<span class="demo">demo</span>{/if}
     </div>
 
-    {#if tasks.length === 0}
+    {#if tree.length === 0}
       <div class="empty-side">
-        <p>Задач пока нет.</p>
-        <p><Kbd keys="⌘N" /> — первая задача</p>
+        <p>Проектов пока нет.</p>
+        <p class="mut">gcode project add &lt;путь&gt;</p>
       </div>
     {:else}
-      {#if attention.length}
-        <div class="grp">⏳ Требуют внимания</div>
-        {#each attention as t (t.id)}
-          <TaskCard title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => (selected = t)} />
-        {/each}
-      {/if}
-      {#if working.length}
-        <div class="grp">⚙ Работают</div>
-        {#each working as t (t.id)}
-          <TaskCard title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => (selected = t)} />
-        {/each}
-      {/if}
-      {#if rest.length}
-        <div class="grp">Остальные</div>
-        {#each rest as t (t.id)}
-          <TaskCard title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => (selected = t)} />
-        {/each}
-      {/if}
+      {#each tree as node (node.project.id)}
+        <div class="pnode" class:pactive={project?.id === node.project.id}>
+          <button class="phead" onclick={() => (project = node.project)}>
+            <span class="pname2">{node.project.name}</span>
+            <span class="pmeta">{node.project.repos} репо</span>
+          </button>
+          {#if node.tasks.length === 0}
+            <p class="mut" style="margin:2px 8px 8px">нет задач · <Kbd keys="⌘N" /></p>
+          {:else}
+            {#each node.tasks as t (t.id)}
+              <TaskCard title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
+            {/each}
+          {/if}
+        </div>
+      {/each}
     {/if}
 
     <div class="side-bottom">
@@ -371,7 +378,7 @@
     overflow-y: auto;
   }
   .proj { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
-  .pname { font-weight: 700; font-size: 14px; }
+  .pname { font-weight: 700; font-size: 14px; font-family: var(--font-mono); }
   .demo {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -380,13 +387,17 @@
     border-radius: 999px;
     padding: 0 7px;
   }
-  .grp {
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    margin: 10px 4px 2px;
+  .pnode { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .phead {
+    display: flex; align-items: baseline; gap: 8px;
+    background: transparent; border: 0; cursor: pointer; text-align: left;
+    padding: 4px 6px; border-radius: var(--r-sm);
+    color: var(--text-primary);
   }
+  .phead:hover { background: var(--surface-2); }
+  .pname2 { font-weight: 700; font-size: 12.5px; }
+  .pmeta { font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); }
+  .pactive .pname2 { color: var(--accent); }
   .empty-side { color: var(--text-muted); text-align: center; margin-top: 40px; }
   .side-bottom { margin-top: auto; padding-top: 12px; }
   main { display: flex; flex-direction: column; overflow: hidden; }

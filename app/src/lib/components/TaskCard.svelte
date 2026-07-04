@@ -29,7 +29,7 @@
   <span class="row1">
     <StatusDot {status} />
     <span class="title">{title}</span>
-    {#if hotkey}<Kbd keys={hotkey} />{/if}
+    {#if hotkey}<span class="hk"><Kbd keys={hotkey} /></span>{/if}
   </span>
   {#if branch || add || del}
     <span class="row2">
@@ -63,6 +63,9 @@
   .task:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .active { border-color: var(--accent); background: var(--surface-2); }
   .row1 { display: flex; align-items: center; gap: 8px; }
+  /* hotkey is a hint, not furniture: revealed on hover/focus (tooltip policy) */
+  .hk { opacity: 0; transition: opacity var(--t-fast) ease-out; }
+  .task:hover .hk, .task:focus-visible .hk { opacity: 1; }
   .title { font-weight: 600; font-size: 13px; flex: 1; }
   .row2 { display: flex; align-items: center; gap: 10px; width: 100%; }
   .grow { flex: 1; }
