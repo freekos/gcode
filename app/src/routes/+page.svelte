@@ -609,10 +609,24 @@
 
 <style>
   .layout {
+    position: relative;
+    z-index: 1;
     display: grid;
     grid-template-columns: var(--sbw, 260px) 1fr;
     grid-template-rows: 1fr;
     height: 100vh;
+  }
+  /* native: ZCode-style window frame — content inset from the window edge,
+     the 8px rim behind is a drag region (win-frame in the layout root) */
+  :global(:root.native) .layout {
+    margin: 8px;
+    height: calc(100vh - 16px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 40px oklch(0% 0 0 / 0.35);
   }
   .layout.with-ctx { grid-template-columns: var(--sbw, 260px) 1fr 230px; }
   .sb-head {

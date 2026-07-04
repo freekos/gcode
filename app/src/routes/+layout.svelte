@@ -17,6 +17,8 @@
   });
 </script>
 
+<div class="win-frame" data-tauri-drag-region></div>
+
 {#if fatal}
   <div class="fatal">
     <b>Ошибка приложения</b>
@@ -26,6 +28,11 @@
 {@render children()}
 
 <style>
+  .win-frame {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
   .fatal {
     position: fixed;
     inset: auto 12px 12px 12px;
