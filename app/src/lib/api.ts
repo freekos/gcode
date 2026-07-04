@@ -148,4 +148,12 @@ export async function onThreadEvent(cb: (e: ThreadEvent) => void): Promise<() =>
   return un;
 }
 
+/** Native folder picker (Tauri). Returns null when cancelled or in demo mode. */
+export async function pickFolder(): Promise<string | null> {
+  if (!inTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const res = await open({ directory: true, multiple: false, title: "Папка проекта (с git-репозиториями)" });
+  return typeof res === "string" ? res : null;
+}
+
 export const isDemo = !inTauri;

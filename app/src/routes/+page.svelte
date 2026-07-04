@@ -15,6 +15,7 @@
     isDemo,
     taskContext,
     projectAdd,
+    pickFolder,
     type Project,
     type Task,
     type ThreadEvent,
@@ -201,6 +202,26 @@
     project = p;
   }
 
+  async function addProject() {
+    // native folder picker; the path-input modal is only the demo/error fallback
+    const picked = await pickFolder();
+    if (picked === null && !isDemo) return; // cancelled
+    if (picked) {
+      try {
+        project = await projectAdd(picked);
+        await reload();
+        return;
+      } catch (e) {
+        projErr = String(e);
+        projPath = picked;
+        addProjOpen = true;
+        return;
+      }
+    }
+    projErr = "";
+    addProjOpen = true;
+  }
+
   async function submitAddProject() {
     projErr = "";
     try {
@@ -232,7 +253,7 @@
     {#if tree.length === 0}
       <div class="empty-side">
         <p>Проектов пока нет.</p>
-        <Button variant="primary" onclick={() => (addProjOpen = true)}>+ Добавить проект</Button>
+        <Button variant="primary" onclick={addProject}>+ Добавить проект</Button>
       </div>
     {:else}
       {#each tree as node (node.project.id)}
@@ -255,7 +276,7 @@
           {/if}
         </div>
       {/each}
-      <button class="newtask addproj" onclick={() => (addProjOpen = true)}>
+      <button class="newtask addproj" onclick={addProject}>
         <span class="plus">＋</span> проект
       </button>
     {/if}
@@ -391,7 +412,7 @@
   <div class="pal-list">
     {#each [
       { label: "Новая задача", hint: "⌘N", act: () => { paletteOpen = false; createOpen = true; } },
-      { label: "Добавить проект", hint: "", act: () => { paletteOpen = false; addProjOpen = true; } },
+      { label: "Добавить проект", hint: "", act: () => { paletteOpen = false; addProject(); } },
       { label: "Styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
       ...ordered.map((t) => ({ label: t.title, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
     ].filter((c) => c.label.toLowerCase().includes(palQ.toLowerCase())) as c (c.label)}
