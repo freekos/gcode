@@ -31,6 +31,7 @@ struct TaskDto {
     branch: String,
     status: String,
     archived: bool,
+    created_at: String,
 }
 
 fn err_s(e: impl std::fmt::Display) -> String {
@@ -106,6 +107,7 @@ fn tasks_list(app: TState<'_, App>, project_id: i64) -> Result<Vec<TaskDto>, Str
                     branch: t.branch,
                     status: t.status.as_str().to_string(),
                     archived: t.archived_at.is_some(),
+                    created_at: t.created_at,
                 })
                 .collect()
         })

@@ -6,12 +6,14 @@
     title,
     status,
     hotkey,
+    time,
     active = false,
     onclick,
   }: {
     title: string;
     status: TaskStatus;
     hotkey?: string;
+    time?: string;
     active?: boolean;
     onclick?: () => void;
   } = $props();
@@ -21,6 +23,7 @@
   <StatusDot {status} size={7} />
   <span class="nm">{title}</span>
   {#if hotkey}<span class="hk"><Kbd keys={hotkey} /></span>{/if}
+  {#if time}<span class="time">{time}</span>{/if}
 </button>
 
 <style>
@@ -45,4 +48,6 @@
   .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hk { opacity: 0; transition: opacity var(--t-fast) ease-out; }
   .row:hover .hk { opacity: 1; }
+  .time { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); flex: none; }
+  .row:hover .time { display: none; } /* время уступает место хоткею на hover */
 </style>

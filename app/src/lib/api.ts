@@ -18,6 +18,18 @@ export interface Task {
   branch: string;
   status: TaskStatus;
   archived: boolean;
+  created_at: string;
+}
+
+/** "2026-07-04 08:12:00" (UTC, from SQLite) -> "3d" / "5h" / "12m" / "сейчас" */
+export function ago(createdAt: string): string {
+  const t = Date.parse(createdAt.replace(" ", "T") + "Z");
+  if (Number.isNaN(t)) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return "сейчас";
+  if (s < 3600) return `${Math.round(s / 60)}м`;
+  if (s < 86400) return `${Math.round(s / 3600)}ч`;
+  return `${Math.round(s / 86400)}д`;
 }
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -34,13 +46,13 @@ const demoProjects: Project[] = [
 ];
 const demoTaskSets: Record<number, Task[]> = {
   1: [
-    { id: 1, title: "Почини редирект после логина", slug: "fix-login-redirect", branch: "fix-login-redirect", status: "review", archived: false },
-    { id: 2, title: "Добавь тесты на webview-куку", slug: "add-webview-tests", branch: "add-webview-tests", status: "running", archived: false },
-    { id: 4, title: "Рефактор API клиента", slug: "refactor-api-client", branch: "refactor-api-client", status: "new", archived: false },
+    { id: 1, title: "Почини редирект после логина", slug: "fix-login-redirect", branch: "fix-login-redirect", status: "review", archived: false, created_at: "2026-07-03 10:00:00" },
+    { id: 2, title: "Добавь тесты на webview-куку", slug: "add-webview-tests", branch: "add-webview-tests", status: "running", archived: false, created_at: "2026-07-03 10:00:00" },
+    { id: 4, title: "Рефактор API клиента", slug: "refactor-api-client", branch: "refactor-api-client", status: "new", archived: false, created_at: "2026-07-03 10:00:00" },
   ],
   2: [
-    { id: 3, title: "Разберись с ценой в KG", slug: "fix-kg-price", branch: "fix-kg-price", status: "needs_input", archived: false },
-    { id: 5, title: "Лендинг лояльности", slug: "loyalty-landing", branch: "loyalty-landing", status: "done", archived: false },
+    { id: 3, title: "Разберись с ценой в KG", slug: "fix-kg-price", branch: "fix-kg-price", status: "needs_input", archived: false, created_at: "2026-07-03 10:00:00" },
+    { id: 5, title: "Лендинг лояльности", slug: "loyalty-landing", branch: "loyalty-landing", status: "done", archived: false, created_at: "2026-07-03 10:00:00" },
   ],
 };
 let demoId = 5;
@@ -70,7 +82,7 @@ export async function taskCreate(projectId: number, prompt: string): Promise<voi
   if (!inTauri) {
     const slug = prompt.toLowerCase().slice(0, 24).replace(/[^a-zа-яё0-9]+/gi, "-");
     demoTaskSets[projectId] = [
-      { id: demoId++, title: prompt, slug, branch: slug, status: "new", archived: false },
+      { id: demoId++, title: prompt, slug, branch: slug, status: "new", archived: false, created_at: new Date().toISOString().slice(0, 19).replace("T", " ") },
       ...(demoTaskSets[projectId] ?? []),
     ];
     setTimeout(

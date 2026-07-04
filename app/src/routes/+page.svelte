@@ -20,6 +20,7 @@
     type Task,
     type ThreadEvent,
     type TaskContext,
+    ago,
   } from "$lib/api";
   import DiffStat from "$lib/components/DiffStat.svelte";
 
@@ -220,6 +221,23 @@
     localStorage.setItem("gcode.draft.newtask", prompt);
   }
 
+  // central hub composer (ZCode-style empty state): create a task right here
+  let hubPrompt = $state("");
+  async function submitHub() {
+    if (!project || !hubPrompt.trim()) return;
+    creating = true;
+    pendingPrompt = hubPrompt.trim();
+    await taskCreate(project.id, hubPrompt.trim());
+    hubPrompt = "";
+  }
+  function greet(): string {
+    const h = new Date().getHours();
+    if (h < 6) return "Поздняя смена?";
+    if (h < 12) return "Доброе утро";
+    if (h < 18) return "Что делаем?";
+    return "Добрый вечер";
+  }
+
   async function submitCreate() {
     if (!project || !prompt.trim()) return;
     creating = true;
@@ -284,8 +302,14 @@
     </div>
 
     <button class="newtask" onclick={() => (createOpen = true)}>
-      <span class="plus">＋</span> Новая задача
+      <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 5.2v5.6M5.2 8h5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Новая задача
       <span class="hk-static"><Kbd keys="⌘N" /></span>
+    </button>
+    <button class="newtask" onclick={() => { palQ = ""; paletteOpen = true; }}>
+      <svg class="ic" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Поиск
+      <span class="hk-static"><Kbd keys="⌘K" /></span>
     </button>
 
     {#if tree.length === 0}
@@ -307,7 +331,7 @@
                 <p class="mut" style="margin:2px 8px 6px">нет задач</p>
               {:else}
                 {#each node.tasks as t (t.id)}
-                  <TaskRow title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
+                  <TaskRow title={t.title} status={t.status} hotkey={hotkeyOf(t)} time={ago(t.created_at)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
                 {/each}
               {/if}
             </div>
@@ -376,7 +400,7 @@
             <span class="queue-note">◐ агент работает{cur.queue.length ? ` · в очереди: ${cur.queue.length}` : ""}</span>
           {/if}
           <span style="flex:1"></span>
-          <Button variant="primary" onclick={sendMsg}>{cur.running ? "В очередь" : "Отправить"} ⏎</Button>
+          <button class="send" onclick={sendMsg} title={cur.running ? "В очередь · ⏎" : "Отправить · ⏎"}>↑</button>
         </div>
         <div class="e-bar">
           <span class="engine">◆ Claude</span>
@@ -386,9 +410,34 @@
         </div>
       </div>
     {:else}
-      <div class="center-empty">
-        <p class="logo">g<b>code</b></p>
-        <p class="mut">Выбери задачу слева или создай новую — <Kbd keys="⌘N" /></p>
+      <div class="hub">
+        <p class="hub-greet">{greet()}</p>
+        <div class="hub-box">
+          <div class="hub-proj">
+            <select bind:value={project} class="proj-pick">
+              {#each tree as n (n.project.id)}
+                <option value={n.project}>📁 {n.project.name}</option>
+              {/each}
+            </select>
+          </div>
+          <textarea
+            bind:value={hubPrompt}
+            rows="3"
+            placeholder="Что сделать? Опиши задачу — имя, ветка и worktrees появятся сами"
+            onkeydown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitHub();
+              }
+            }}
+          ></textarea>
+          <div class="hub-bar">
+            <span class="mut" style="font-size:11px">worktrees: все репо · git агенту запрещён</span>
+            <span style="flex:1"></span>
+            <button class="send" onclick={submitHub} title="Создать задачу · ⏎">↑</button>
+          </div>
+        </div>
+        <p class="mut" style="font-size:11px">или выбери задачу слева · <Kbd keys="⌘K" /> — всё остальное</p>
       </div>
     {/if}
   </main>
@@ -510,6 +559,62 @@
   }
   .addproj { margin-top: 4px; }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
+  .ic { width: 15px; height: 15px; color: var(--text-muted); flex: none; }
+  .newtask:hover .ic { color: var(--text-secondary); }
+  .hub {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 0 24px;
+  }
+  .hub-greet { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); margin: 0; }
+  .hub-box {
+    width: min(640px, 100%);
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+  .hub-proj { margin-bottom: 6px; }
+  .proj-pick {
+    font: 500 12px var(--font-ui);
+    color: var(--text-secondary);
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+  .proj-pick:focus-visible { outline: 2px solid var(--accent); }
+  .hub-box textarea {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    resize: none;
+    color: var(--text-primary);
+    font: 13.5px var(--font-ui);
+    outline: none;
+    padding: 4px 2px;
+  }
+  .hub-bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .send {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 0;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter var(--t-fast) ease-out, transform var(--t-fast) ease-out;
+  }
+  .send:hover { filter: brightness(1.1); }
+  .send:active { transform: translateY(1px); }
+  .send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .perr { color: var(--diff-del); font-size: 12px; margin: 6px 0 0; }
   aside {
     background: var(--surface-1);
@@ -577,8 +682,6 @@
     gap: 8px;
     color: var(--text-secondary);
   }
-  .logo { font-family: var(--font-mono); font-weight: 700; font-size: 22px; color: var(--text-primary); }
-  .logo b { color: var(--accent); }
   .mut { color: var(--text-muted); font-size: 12px; }
   .spin { font-size: 20px; animation: gc-spin 1s linear infinite; }
   @keyframes gc-spin { to { transform: rotate(360deg); } }
