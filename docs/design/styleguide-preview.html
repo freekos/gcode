@@ -1,0 +1,415 @@
+<title>gcode — дизайн-система (превью)</title>
+<style>
+  /* ============ TOKENS (источник: docs/design/design-system.md) ============ */
+  :root {
+    /* primitives → semantic. Страница осознанно одно-темная: продукт dark-first. */
+    --surface-0: oklch(16.5% 0.012 262);
+    --surface-1: oklch(19.5% 0.014 262);
+    --surface-2: oklch(23.5% 0.016 262);
+    --surface-3: oklch(28% 0.018 262);
+    --border-subtle: oklch(32% 0.02 262 / .6);
+    --border-strong: oklch(42% 0.02 262 / .8);
+
+    --text-primary: oklch(93% 0.008 262);
+    --text-secondary: oklch(72% 0.012 262);
+    --text-muted: oklch(55% 0.014 262);
+    --text-disabled: oklch(42% 0.012 262);
+
+    --accent: oklch(66% 0.16 250);          /* дефолт: холодный синий */
+    --accent-soft: oklch(66% 0.16 250 / .16);
+
+    --status-new: oklch(60% 0.02 262);
+    --status-running: oklch(75% 0.14 75);
+    --status-needs-input: oklch(70% 0.17 45);
+    --status-review: oklch(68% 0.15 255);
+    --status-done: oklch(72% 0.15 155);
+
+    --diff-add: oklch(70% 0.14 155);
+    --diff-add-bg: oklch(70% 0.14 155 / .12);
+    --diff-del: oklch(64% 0.19 25);
+    --diff-del-bg: oklch(64% 0.19 25 / .12);
+
+    --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+    --t-fast: 120ms; --t-base: 160ms;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: var(--font-mono); }
+
+  /* ============ каркас витрины ============ */
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 96px; }
+  header.top {
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in oklab, var(--surface-0) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .top-in { max-width: 980px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+  .logo { font-family: var(--font-mono); font-weight: 700; font-size: 15px; letter-spacing: -.02em; }
+  .logo b { color: var(--accent); }
+  .top-note { color: var(--text-muted); font-size: 12px; }
+  .spacer { flex: 1; }
+
+  .swatches { display: flex; gap: 8px; align-items: center; }
+  .swatches span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
+  .sw {
+    width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; padding: 0;
+    transition: transform var(--t-fast) ease-out, border-color var(--t-fast) ease-out;
+  }
+  .sw:hover { transform: scale(1.12); }
+  .sw[aria-pressed="true"] { border-color: var(--text-primary); }
+  .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  section { margin-top: 56px; }
+  .eyebrow {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--accent); font-weight: 600; margin-bottom: 6px;
+  }
+  h2 { font-size: 20px; margin: 0 0 6px; letter-spacing: -.01em; text-wrap: balance; }
+  .sub { color: var(--text-secondary); margin: 0 0 20px; max-width: 640px; }
+  .tok { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+  /* ============ поверхности ============ */
+  .surfaces { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .surf { border: 1px solid var(--border-subtle); border-radius: var(--r-lg); padding: 16px; min-height: 110px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; }
+  .surf b { font-size: 13px; }
+
+  /* ============ статусы ============ */
+  .rowflex { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500;
+    background: var(--surface-2); border: 1px solid var(--border-subtle);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .badge.new .dot { background: var(--status-new); }
+  .badge.running .dot { background: var(--status-running); animation: pulse 2s ease-in-out infinite; }
+  .badge.needs .dot { background: var(--status-needs-input); }
+  .badge.review .dot { background: var(--status-review); }
+  .badge.done .dot { background: var(--status-done); }
+  @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in oklab, var(--status-running) 50%, transparent);} 50% { opacity: .75; box-shadow: 0 0 0 5px transparent; } }
+  @media (prefers-reduced-motion: reduce) { .badge.running .dot { animation: none; } * { transition: none !important; } }
+
+  /* ============ типографика ============ */
+  .typerow { display: grid; grid-template-columns: 110px 1fr; gap: 4px 20px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--border-subtle); }
+  .t20 { font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+  .t16 { font-size: 16px; font-weight: 600; }
+  .t14 { font-size: 14px; }
+  .t13 { font-size: 13px; }
+  .t12 { font-size: 12px; color: var(--text-secondary); }
+  .tmono { font-family: var(--font-mono); font-size: 12.5px; }
+
+  /* ============ кнопки/поля ============ */
+  .btn {
+    font: 500 13px var(--font-ui); color: var(--text-primary);
+    background: var(--surface-2); border: 1px solid var(--border-subtle);
+    padding: 6px 14px; border-radius: var(--r-md); cursor: pointer;
+    transition: background var(--t-fast) ease-out, border-color var(--t-fast) ease-out, transform var(--t-fast) ease-out;
+  }
+  .btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
+  .btn:active { transform: translateY(1px); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); border-color: transparent; color: oklch(15% 0.02 262); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--text-primary); }
+  .btn.danger { color: var(--diff-del); border-color: color-mix(in oklab, var(--diff-del) 40%, transparent); background: transparent; }
+  .btn.danger:hover { background: var(--diff-del-bg); }
+  .btn[disabled] { color: var(--text-disabled); background: var(--surface-1); border-color: var(--border-subtle); cursor: not-allowed; }
+
+  .input {
+    font: 13px var(--font-ui); color: var(--text-primary);
+    background: var(--surface-1); border: 1px solid var(--border-subtle);
+    padding: 7px 12px; border-radius: var(--r-md); width: 280px;
+    transition: border-color var(--t-fast) ease-out, box-shadow var(--t-fast) ease-out;
+  }
+  .input::placeholder { color: var(--text-muted); }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .kbd {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-bottom-width: 2px; border-radius: var(--r-sm); padding: 1px 6px;
+  }
+
+  /* ============ карточка задачи ============ */
+  .cardgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; max-width: 820px; }
+  .task {
+    background: var(--surface-1); border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg); padding: 12px 14px; cursor: pointer;
+    transition: background var(--t-base) ease-out, border-color var(--t-base) ease-out;
+  }
+  .task:hover { background: var(--surface-2); }
+  .task.active { border-color: var(--accent); background: var(--surface-2); }
+  .task .row1 { display: flex; align-items: center; gap: 8px; }
+  .task .title { font-weight: 600; font-size: 13px; flex: 1; }
+  .task .row2 { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .task .branch { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .task .diffstat { font-family: var(--font-mono); font-size: 11px; margin-left: auto; }
+  .add { color: var(--diff-add); } .del { color: var(--diff-del); }
+  .task .ask {
+    margin-top: 8px; font-size: 12px; color: var(--status-needs-input);
+    background: color-mix(in oklab, var(--status-needs-input) 12%, transparent);
+    border-radius: var(--r-sm); padding: 5px 8px;
+  }
+
+  /* ============ тул-события/композер ============ */
+  .toolline { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); padding: 3px 0; }
+  .toolline .tool { color: var(--accent); }
+  .composer {
+    max-width: 560px; background: var(--surface-1); border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg); padding: 10px 12px;
+  }
+  .composer textarea {
+    width: 100%; border: 0; background: transparent; resize: none; color: var(--text-primary);
+    font: 13px var(--font-ui); outline: none; min-height: 40px;
+  }
+  .composer .bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .queue-note { font-size: 11.5px; color: var(--status-running); display: flex; gap: 6px; align-items: center; }
+
+  /* ============ модалка ============ */
+  dialog {
+    background: var(--surface-3); color: var(--text-primary);
+    border: 1px solid var(--border-strong); border-radius: 12px;
+    padding: 20px 22px; width: min(440px, 90vw);
+    box-shadow: 0 24px 60px oklch(0% 0 0 / .5);
+  }
+  dialog::backdrop { background: oklch(10% 0.01 262 / .6); backdrop-filter: blur(2px); }
+  dialog h3 { margin: 0 0 4px; font-size: 15px; }
+  dialog p { margin: 0 0 16px; color: var(--text-secondary); }
+
+  /* ============ мини-макет A1 ============ */
+  .mock {
+    border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden;
+    background: var(--surface-0); font-size: 12px;
+  }
+  .mock .cols { display: grid; grid-template-columns: 200px 1fr 190px; min-height: 380px; }
+  .mock .side { background: var(--surface-1); border-right: 1px solid var(--border-subtle); padding: 10px; }
+  .mock .grouplbl { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); margin: 10px 4px 6px; }
+  .mock .mtask { display: flex; gap: 7px; align-items: center; padding: 6px 8px; border-radius: var(--r-md); cursor: pointer; }
+  .mock .mtask:hover { background: var(--surface-2); }
+  .mock .mtask.sel { background: var(--accent-soft); }
+  .mock .mtask .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mock .mtask .kb { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .mock .center { padding: 14px 18px; display: flex; flex-direction: column; }
+  .mock .thread-h { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; }
+  .mock .msg { margin-top: 12px; max-width: 92%; }
+  .mock .msg.you { background: var(--surface-2); border-radius: var(--r-lg); padding: 8px 12px; align-self: flex-end; }
+  .mock .msg.agent { color: var(--text-secondary); }
+  .mock .ctx { background: var(--surface-1); border-left: 1px solid var(--border-subtle); padding: 12px; }
+  .mock .ctx h4 { margin: 0 0 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); }
+  .mock .repo { padding: 8px; background: var(--surface-2); border-radius: var(--r-md); margin-bottom: 8px; }
+  .mock .repo .rn { font-family: var(--font-mono); font-size: 11px; }
+  .mock .goal li { color: var(--text-secondary); margin: 3px 0; }
+  .mock .goal li.done { color: var(--text-muted); text-decoration: line-through; }
+  .mock .statusbar { border-top: 1px solid var(--border-subtle); padding: 6px 14px; display: flex; gap: 16px; color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
+  .note { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="logo">g<b>code</b> <span style="font-weight:400;color:var(--text-muted)">design system</span></div>
+    <div class="top-note">превью для ревью · в проде шрифты Inter + JetBrains Mono бандлятся</div>
+    <div class="spacer"></div>
+    <div class="swatches" role="group" aria-label="Акцентный цвет">
+      <span>акцент</span>
+      <button class="sw" aria-pressed="true"  style="background:oklch(66% .16 250)" data-l="66%" data-c=".16" data-h="250" title="Синий"></button>
+      <button class="sw" aria-pressed="false" style="background:oklch(64% .18 295)" data-l="64%" data-c=".18" data-h="295" title="Фиолетовый"></button>
+      <button class="sw" aria-pressed="false" style="background:oklch(75% .14 75)"  data-l="75%" data-c=".14" data-h="75"  title="Янтарный"></button>
+      <button class="sw" aria-pressed="false" style="background:oklch(72% .15 155)" data-l="72%" data-c=".15" data-h="155" title="Зелёный"></button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <div class="eyebrow">01 · Поверхности</div>
+    <h2>Глубина без теней — четыре уровня</h2>
+    <p class="sub">Рецепт Linear: каждый уровень чуть светлее предыдущего. Фон → панели → карточки и hover → модалки.</p>
+    <div class="surfaces">
+      <div class="surf" style="background:var(--surface-0)"><b>surface-0</b><span class="tok">фон приложения</span></div>
+      <div class="surf" style="background:var(--surface-1)"><b>surface-1</b><span class="tok">сайдбар, панели</span></div>
+      <div class="surf" style="background:var(--surface-2)"><b>surface-2</b><span class="tok">карточки, hover</span></div>
+      <div class="surf" style="background:var(--surface-3)"><b>surface-3</b><span class="tok">модалки, поповеры</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 · Статусы</div>
+    <h2>Цвет — только сигнал</h2>
+    <p class="sub">Единственные яркие цвета интерфейса. Running пульсирует — живая работа видна периферийным зрением.</p>
+    <div class="rowflex">
+      <span class="badge new"><span class="dot"></span>new</span>
+      <span class="badge running"><span class="dot"></span>running</span>
+      <span class="badge needs"><span class="dot"></span>needs input</span>
+      <span class="badge review"><span class="dot"></span>review</span>
+      <span class="badge done"><span class="dot"></span>done</span>
+      <span style="width:24px"></span>
+      <span class="mono" style="font-size:12px"><span class="add">+61</span> <span class="del">−3</span></span>
+      <span class="tok">diff-add / diff-del</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 · Типографика</div>
+    <h2>ZCode-баланс: гуманистический UI + моно-акценты</h2>
+    <p class="sub">Inter для интерфейса, JetBrains Mono для всего «инженерного»: веток, слагов, команд, диффстатов.</p>
+    <div class="typerow"><span class="tok">20 / 600</span><span class="t20">Заголовок экрана</span></div>
+    <div class="typerow"><span class="tok">16 / 600</span><span class="t16">Заголовок секции</span></div>
+    <div class="typerow"><span class="tok">14 / 400</span><span class="t14">Крупный текст треда</span></div>
+    <div class="typerow"><span class="tok">13 / 400</span><span class="t13">Базовый текст интерфейса — компактная плотность инструмента</span></div>
+    <div class="typerow"><span class="tok">12 / 400</span><span class="t12">Вторичный текст, подписи, метаданные</span></div>
+    <div class="typerow"><span class="tok">mono 12.5</span><span class="tmono">fix-login-flow · feature/checkout-v2 · <span class="add">+61</span> <span class="del">−3</span></span></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 · Кнопки и поля</div>
+    <h2>Один primary на экран</h2>
+    <p class="sub">Всё остальное — тихое. Фокус всегда виден (кольцо акцента), нажатие отвечает за 120ms.</p>
+    <div class="rowflex" style="margin-bottom:16px">
+      <button class="btn primary">Создать задачу</button>
+      <button class="btn">Открыть дифф</button>
+      <button class="btn ghost">Отмена</button>
+      <button class="btn danger">Снести worktree</button>
+      <button class="btn" disabled>Недоступно</button>
+    </div>
+    <div class="rowflex">
+      <input class="input" placeholder="Название задачи…">
+      <span>Хоткеи: <span class="kbd">⌘N</span> <span class="kbd">⌘K</span> <span class="kbd">⌘1…9</span></span>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 · Карточка задачи</div>
+    <h2>Статус читается до текста</h2>
+    <p class="sub">Точка-статус, имя, ветка моно, живой диффстат. needs_input кричит вопросом прямо на карточке.</p>
+    <div class="cardgrid">
+      <div class="task active">
+        <div class="row1"><span class="dot" style="background:var(--status-review)"></span><span class="title">fix-login</span><span class="kbd">⌘1</span></div>
+        <div class="row2"><span class="branch">fix-login</span><span class="diffstat"><span class="add">+61</span> <span class="del">−3</span></span></div>
+      </div>
+      <div class="task">
+        <div class="row1"><span class="dot" style="background:var(--status-running);animation:pulse 2s ease-in-out infinite"></span><span class="title">add-tests</span><span class="kbd">⌘2</span></div>
+        <div class="row2"><span class="branch">add-tests</span><span class="diffstat"><span class="add">+12</span></span></div>
+      </div>
+      <div class="task">
+        <div class="row1"><span class="dot" style="background:var(--status-needs-input)"></span><span class="title">price-bug</span><span class="kbd">⌘3</span></div>
+        <div class="row2"><span class="branch">price-bug</span></div>
+        <div class="ask">Агент спрашивает: «какой из двух эндпоинтов считать источником цены?»</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 · Тред</div>
+    <h2>Тул-события — одна строка, не простыня</h2>
+    <p class="sub">Паттерн ZCode. Плюс композер с очередью: агент работает — сообщение встаёт в очередь, не теряется.</p>
+    <div style="margin-bottom:18px">
+      <div class="toolline"><span class="tool">[Edit]</span> server/src/auth.ts <span class="add">+4</span> <span class="del">−1</span></div>
+      <div class="toolline"><span class="tool">[Bash]</span> pnpm test auth <span style="color:var(--status-done)">✓ 9 passed</span></div>
+      <div class="toolline"><span class="tool">[Read]</span> crm/src/session.ts</div>
+    </div>
+    <div class="composer">
+      <textarea placeholder="Сообщение агенту…">теперь добавь тест на редирект</textarea>
+      <div class="bar">
+        <span class="queue-note"><span class="dot" style="background:var(--status-running);width:7px;height:7px"></span>агент работает — сообщение уйдёт следующим</span>
+        <div class="spacer"></div>
+        <button class="btn ghost">⏸ Стоп</button>
+        <button class="btn primary">В очередь ⏎</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">07 · Модалка</div>
+    <h2>Поверхность 3 + затемнение</h2>
+    <p class="sub">Глобальные модалки (ops, ассистент, палитра) живут на самом верхнем уровне глубины.</p>
+    <button class="btn" onclick="document.getElementById('dlg').showModal()">Показать модалку</button>
+    <dialog id="dlg">
+      <h3>Создать PR для fix-login?</h3>
+      <p>2 репо · ветка <code>fix-login</code> → <code>main</code> · <span class="add">+61</span> <span class="del">−3</span></p>
+      <div class="rowflex" style="justify-content:flex-end">
+        <button class="btn ghost" onclick="document.getElementById('dlg').close()">Отмена</button>
+        <button class="btn primary" onclick="document.getElementById('dlg').close()">Создать PR</button>
+      </div>
+    </dialog>
+  </section>
+
+  <section>
+    <div class="eyebrow">08 · Всё вместе</div>
+    <h2>Мини-макет утверждённого layout A1</h2>
+    <p class="sub">Сайдбар задач · тред · контекст-панель per-repo с прогрессом агента · статусбар с лимитами подписки.</p>
+    <div class="mock">
+      <div class="cols">
+        <div class="side">
+          <div class="grouplbl">⏳ Требуют внимания</div>
+          <div class="mtask sel"><span class="dot" style="background:var(--status-review)"></span><span class="nm">fix-login</span><span class="kb">⌘1</span></div>
+          <div class="mtask"><span class="dot" style="background:var(--status-needs-input)"></span><span class="nm">price-bug</span><span class="kb">⌘2</span></div>
+          <div class="grouplbl">⚙ Работают</div>
+          <div class="mtask"><span class="dot" style="background:var(--status-running);animation:pulse 2s ease-in-out infinite"></span><span class="nm">add-tests</span><span class="kb">⌘3</span></div>
+          <div class="grouplbl">Остальные</div>
+          <div class="mtask"><span class="dot" style="background:var(--status-new)"></span><span class="nm">refactor-api</span><span class="kb">⌘4</span></div>
+          <div class="mtask"><span class="dot" style="background:var(--status-done)"></span><span class="nm">webview-fix</span><span class="kb">⌘5</span></div>
+        </div>
+        <div class="center">
+          <div class="thread-h">
+            <b>fix-login</b>
+            <span class="badge review" style="font-size:11px;padding:2px 8px"><span class="dot"></span>review</span>
+            <span class="branch mono" style="font-size:11px;color:var(--text-muted)">fix-login</span>
+          </div>
+          <div class="msg you">почини редирект после логина, ломается на вебвью</div>
+          <div class="msg agent">Нашёл причину: в <code>auth.ts</code> редирект собирался без учёта webview-куки. Исправил и добавил тест.</div>
+          <div class="toolline"><span class="tool">[Edit]</span> server/src/auth.ts <span class="add">+4</span> <span class="del">−1</span></div>
+          <div class="toolline"><span class="tool">[Bash]</span> pnpm test auth <span style="color:var(--status-done)">✓ 9 passed</span></div>
+          <div style="flex:1"></div>
+          <div class="composer" style="max-width:none">
+            <textarea placeholder="Сообщение агенту…"></textarea>
+            <div class="bar"><div class="spacer"></div><button class="btn primary">Отправить ⏎</button></div>
+          </div>
+        </div>
+        <div class="ctx">
+          <h4>Worktrees</h4>
+          <div class="repo"><div class="rn">server</div><div class="row2" style="display:flex;gap:8px"><span class="tok">✎ 3 файла</span><span class="diffstat mono" style="font-size:11px"><span class="add">+49</span> <span class="del">−2</span></span></div></div>
+          <div class="repo"><div class="rn">crm</div><div class="row2" style="display:flex;gap:8px"><span class="tok">✎ 1 файл</span><span class="diffstat mono" style="font-size:11px"><span class="add">+12</span> <span class="del">−1</span></span></div></div>
+          <h4 style="margin-top:14px">Goal · 3/4</h4>
+          <ul class="goal" style="margin:0;padding-left:16px">
+            <li class="done">найти причину редиректа</li>
+            <li class="done">исправить auth.ts</li>
+            <li class="done">тест на webview-куку</li>
+            <li>прогнать полный тест-сьют</li>
+          </ul>
+        </div>
+      </div>
+      <div class="statusbar"><span>↯ 58% 5h · 41% wk</span><span>● 1 агент работает</span><span style="margin-left:auto">gcode 0.1</span></div>
+    </div>
+    <div class="note">Это статический макет для утверждения вида — не приложение. Реальные экраны собираются из этих же токенов и компонентов в фазе 3b.</div>
+  </section>
+
+</div>
+
+<script>
+  const root = document.documentElement;
+  document.querySelectorAll('.sw').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      const { l, c, h } = btn.dataset;
+      root.style.setProperty('--accent', `oklch(${l} ${c} ${h})`);
+      root.style.setProperty('--accent-soft', `oklch(${l} ${c} ${h} / .16)`);
+    });
+  });
+</script>
