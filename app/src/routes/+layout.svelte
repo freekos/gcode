@@ -6,6 +6,37 @@
 
   onMount(() => {
     if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("native");
+
+    // global tooltip: one fixed pill, clamped to the viewport (panels clip ::after)
+    const tip = document.createElement("div");
+    tip.id = "gc-tip";
+    document.body.appendChild(tip);
+    let timer = 0;
+    const onOver = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement).closest("[data-tip]") as HTMLElement | null;
+      if (!el) return;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        tip.textContent = el.dataset.tip ?? "";
+        tip.classList.add("show");
+        const r = el.getBoundingClientRect();
+        const tw = tip.offsetWidth;
+        const x = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), window.innerWidth - tw - 8);
+        let y = r.top - tip.offsetHeight - 8;
+        if (y < 8) y = r.bottom + 8;
+        tip.style.left = `${x}px`;
+        tip.style.top = `${y}px`;
+      }, 450);
+    };
+    const onOut = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement).closest("[data-tip]");
+      if (!el) return;
+      clearTimeout(timer);
+      tip.classList.remove("show");
+    };
+    document.addEventListener("mouseover", onOver);
+    document.addEventListener("mouseout", onOut);
+    document.addEventListener("mousedown", () => tip.classList.remove("show"));
     const onErr = (e: ErrorEvent) => (fatal = `${e.message}\n${e.filename}:${e.lineno}`);
     const onRej = (e: PromiseRejectionEvent) => (fatal = `unhandled rejection: ${e.reason}`);
     window.addEventListener("error", onErr);

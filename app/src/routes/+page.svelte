@@ -663,8 +663,8 @@
   /* native: ZCode-style window frame — content inset from the window edge,
      the 8px rim behind is a drag region (win-frame in the layout root) */
   :global(:root.native) .layout {
-    margin: 8px;
-    height: calc(100vh - 16px);
+    margin: 10px 14px 14px;
+    height: calc(100vh - 24px);
     border: 1px solid var(--border-subtle);
     border-radius: 14px;
     overflow: hidden;
