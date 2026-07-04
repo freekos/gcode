@@ -329,6 +329,18 @@ impl State {
         Ok(rows)
     }
 
+    /// Rename the human-facing title (the AI names tasks; slug/branch stay stable).
+    pub fn set_task_title(&mut self, task_id: i64, title: &str) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE tasks SET title = ?2 WHERE id = ?1",
+            params![task_id, title],
+        )?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("task #{task_id}")));
+        }
+        Ok(())
+    }
+
     pub fn set_task_status(&mut self, task_id: i64, status: TaskStatus) -> Result<()> {
         let n = self.conn.execute(
             "UPDATE tasks SET status = ?2 WHERE id = ?1",
@@ -706,6 +718,30 @@ mod tests {
         // unknown group
         let err = s.assign_group(t.id, Some(9999)).unwrap_err();
         assert!(matches!(err, CoreError::NotFound(_)));
+    }
+
+    #[test]
+    fn task_title_renamable_slug_stable() {
+        let mut s = st();
+        let p = proj(&mut s);
+        let repos = s.project_repos(p.id).unwrap();
+        let t = s
+            .add_task(
+                p.id,
+                "temp",
+                "temp-slug",
+                "temp-slug",
+                &[(repos[0].id, "/x".into())],
+            )
+            .unwrap();
+        s.set_task_title(t.id, "Починить редирект логина").unwrap();
+        let t2 = s.task_by_id(t.id).unwrap();
+        assert_eq!(t2.title, "Починить редирект логина");
+        assert_eq!(t2.slug, "temp-slug", "slug/branch stay stable on rename");
+        assert!(matches!(
+            s.set_task_title(999, "x").unwrap_err(),
+            CoreError::NotFound(_)
+        ));
     }
 
     #[test]

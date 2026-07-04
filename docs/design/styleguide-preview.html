@@ -180,6 +180,18 @@
   .composer .bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .queue-note { font-size: 11.5px; color: var(--status-running); display: flex; gap: 6px; align-items: center; }
 
+  .engine-bar {
+    display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-top: 8px;
+    border-top: 1px dashed var(--border-subtle);
+  }
+  .engine-pick {
+    font: 500 11.5px var(--font-ui); color: var(--text-secondary);
+    background: var(--surface-2); border: 1px solid var(--border-subtle);
+    border-radius: 999px; padding: 3px 10px; cursor: pointer;
+    transition: color var(--t-fast) ease-out, border-color var(--t-fast) ease-out;
+  }
+  .engine-pick:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
   /* ============ модалка ============ */
   dialog {
     background: var(--surface-3); color: var(--text-primary);
@@ -190,6 +202,16 @@
   dialog::backdrop { background: oklch(10% 0.01 262 / .6); backdrop-filter: blur(2px); }
   dialog h3 { margin: 0 0 4px; font-size: 15px; }
   dialog p { margin: 0 0 16px; color: var(--text-secondary); }
+
+  .ops-row {
+    display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+  }
+  .ops-env { font-weight: 600; }
+  .ops-what { display: flex; flex-direction: column; gap: 2px; }
+  .ops-what .mono { font-size: 12px; }
+  .ops-act { display: flex; gap: 8px; }
+  .ops-hist { margin-top: 14px; }
 
   /* ============ мини-макет A1 ============ */
   .mock {
@@ -294,7 +316,24 @@
   </section>
 
   <section>
-    <div class="eyebrow">05 · Карточка задачи</div>
+    <div class="eyebrow">05 · Создание задачи</div>
+    <h2>Ты пишешь «что сделать» — имя придумает ИИ</h2>
+    <p class="sub">⌘N открывает одно поле: промпт. Никаких «введите название» — slug и заголовок генерятся, репо по умолчанию все (Tab — выбрать).</p>
+    <div class="composer" style="max-width:560px">
+      <textarea placeholder="Что сделать? Например: почини редирект после логина, ломается на вебвью">почини редирект после логина, ломается на вебвью</textarea>
+      <div class="bar">
+        <span class="tok">репо: все (Tab — выбрать)</span>
+        <div class="spacer"></div>
+        <button class="btn primary">Создать ⏎</button>
+      </div>
+      <div class="engine-bar" style="border-top:none;padding-top:0">
+        <span class="tok">→ имя: <span class="mono" style="color:var(--text-secondary)">fix-login-redirect</span> · придумал агент, можно переименовать</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 · Карточка задачи</div>
     <h2>Статус читается до текста</h2>
     <p class="sub">Точка-статус, имя, ветка моно, живой диффстат. needs_input кричит вопросом прямо на карточке.</p>
     <div class="cardgrid">
@@ -315,7 +354,7 @@
   </section>
 
   <section>
-    <div class="eyebrow">06 · Тред</div>
+    <div class="eyebrow">07 · Тред</div>
     <h2>Тул-события — одна строка, не простыня</h2>
     <p class="sub">Паттерн ZCode. Плюс композер с очередью: агент работает — сообщение встаёт в очередь, не теряется.</p>
     <div style="margin-bottom:18px">
@@ -331,14 +370,54 @@
         <button class="btn ghost">⏸ Стоп</button>
         <button class="btn primary">В очередь ⏎</button>
       </div>
+      <div class="engine-bar">
+        <button class="engine-pick">◆ Claude <span style="opacity:.55">▾</span></button>
+        <span class="tok">↯ 58% 5h · 41% wk</span>
+        <span class="tok" style="margin-left:auto">лимиты и движок живут у чата — не у приложения</span>
+      </div>
     </div>
   </section>
 
   <section>
-    <div class="eyebrow">07 · Модалка</div>
+    <div class="eyebrow">08 · Модалки</div>
     <h2>Поверхность 3 + затемнение</h2>
     <p class="sub">Глобальные модалки (ops, ассистент, палитра) живут на самом верхнем уровне глубины.</p>
-    <button class="btn" onclick="document.getElementById('dlg').showModal()">Показать модалку</button>
+    <div class="rowflex" style="margin-bottom:6px">
+      <button class="btn" onclick="document.getElementById('dlg').showModal()">Модалка-подтверждение</button>
+      <button class="btn primary" onclick="document.getElementById('ops').showModal()">Ops-модалка ⌘O</button>
+    </div>
+    <dialog id="ops" style="width:min(660px,94vw)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <h3 style="margin:0">Ops · azi</h3>
+        <span class="tok">данные — из git/CI фактов, не из слов агента</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="kbd">Esc</span>
+      </div>
+      <div class="ops-row">
+        <div class="ops-env">Test</div>
+        <div class="ops-what"><span class="mono">fix-login@2167b9</span><span class="tok">30 мин назад · pipeline <span style="color:var(--status-done)">✓</span></span></div>
+        <div class="ops-act"><button class="btn">Тест</button><button class="btn ghost">Логи</button></div>
+      </div>
+      <div class="ops-row">
+        <div class="ops-env">Stage</div>
+        <div class="ops-what"><span class="mono">main@49e2e6</span><span class="tok">вчера · pipeline <span style="color:var(--status-done)">✓</span></span></div>
+        <div class="ops-act"><button class="btn primary">Deploy</button><button class="btn ghost">Логи</button></div>
+      </div>
+      <div class="ops-row">
+        <div class="ops-env">Prod</div>
+        <div class="ops-what"><span class="mono">v2.14.0</span><span class="tok">3 дня назад · pipeline <span style="color:var(--diff-del)">✗ e2e</span></span></div>
+        <div class="ops-act"><button class="btn danger">Release</button><button class="btn ghost">Логи</button></div>
+      </div>
+      <div class="ops-hist">
+        <div class="tok" style="margin-bottom:6px">ИСТОРИЯ</div>
+        <div class="toolline"><span style="color:var(--status-done)">✓</span> deploy stage · fix-login · 4м · сегодня 09:12</div>
+        <div class="toolline"><span style="color:var(--status-running)">⏳</span> containerize test · add-tests · идёт 2м — можно закрыть модалку, статус сохранится</div>
+        <div class="toolline"><span style="color:var(--diff-del)">✗</span> e2e prod-smoke · вчера 18:40 · <span style="color:var(--accent);cursor:pointer">разбор →</span></div>
+      </div>
+      <div class="rowflex" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn ghost" onclick="document.getElementById('ops').close()">Закрыть</button>
+      </div>
+    </dialog>
     <dialog id="dlg">
       <h3>Создать PR для fix-login?</h3>
       <p>2 репо · ветка <code>fix-login</code> → <code>main</code> · <span class="add">+61</span> <span class="del">−3</span></p>
@@ -350,7 +429,7 @@
   </section>
 
   <section>
-    <div class="eyebrow">08 · Всё вместе</div>
+    <div class="eyebrow">09 · Всё вместе</div>
     <h2>Мини-макет утверждённого layout A1</h2>
     <p class="sub">Сайдбар задач · тред · контекст-панель per-repo с прогрессом агента · статусбар с лимитами подписки.</p>
     <div class="mock">
@@ -379,22 +458,24 @@
           <div class="composer" style="max-width:none">
             <textarea placeholder="Сообщение агенту…"></textarea>
             <div class="bar"><div class="spacer"></div><button class="btn primary">Отправить ⏎</button></div>
+            <div class="engine-bar"><button class="engine-pick">◆ Claude <span style="opacity:.55">▾</span></button><span class="tok">↯ 58% 5h · 41% wk</span></div>
           </div>
         </div>
         <div class="ctx">
           <h4>Worktrees</h4>
           <div class="repo"><div class="rn">server</div><div class="row2" style="display:flex;gap:8px"><span class="tok">✎ 3 файла</span><span class="diffstat mono" style="font-size:11px"><span class="add">+49</span> <span class="del">−2</span></span></div></div>
           <div class="repo"><div class="rn">crm</div><div class="row2" style="display:flex;gap:8px"><span class="tok">✎ 1 файл</span><span class="diffstat mono" style="font-size:11px"><span class="add">+12</span> <span class="del">−1</span></span></div></div>
-          <h4 style="margin-top:14px">Goal · 3/4</h4>
+          <h4 style="margin-top:14px">Goal · 3/4 <span style="letter-spacing:0;text-transform:none">· из PROGRESS.md</span></h4>
           <ul class="goal" style="margin:0;padding-left:16px">
             <li class="done">найти причину редиректа</li>
             <li class="done">исправить auth.ts</li>
             <li class="done">тест на webview-куку</li>
             <li>прогнать полный тест-сьют</li>
           </ul>
+          <div class="tok" style="margin-top:12px;line-height:1.5">TASK.md + PROGRESS.md живут в папке задачи — пересел на другого агента (Codex) → он читает те же файлы и продолжает.</div>
         </div>
       </div>
-      <div class="statusbar"><span>↯ 58% 5h · 41% wk</span><span>● 1 агент работает</span><span style="margin-left:auto">gcode 0.1</span></div>
+      <div class="statusbar"><span>azi · 5 задач</span><span>● 1 агент работает</span><span style="margin-left:auto">gcode 0.1</span></div>
     </div>
     <div class="note">Это статический макет для утверждения вида — не приложение. Реальные экраны собираются из этих же токенов и компонентов в фазе 3b.</div>
   </section>

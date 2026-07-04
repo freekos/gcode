@@ -217,12 +217,25 @@ pub fn write_agent_guardrails(root: &Path, title: &str, repos_list: &str) {
 }
 "#;
     let _ = std::fs::write(claude_dir.join("settings.json"), settings);
+    // Goal/progress live as FILES in the task root — engine-agnostic: switching the
+    // agent (Claude -> Codex) keeps the goal and progress readable by the next one.
+    if !root.join("PROGRESS.md").exists() {
+        let _ = std::fs::write(
+            root.join("PROGRESS.md"),
+            format!(
+                "# Progress: {title}\n\n- [ ] (агент заполняет план здесь и отмечает сделанное)\n"
+            ),
+        );
+    }
     let claude_md = format!(
         "# Task: {title}\n\n\
          You are working on this task inside gcode. The repos below are YOUR worktrees — \
          each subfolder is a separate repository checked out on the task branch:\n{repos_list}\n\n\
          ## Rules\n\
          - Work ONLY inside these worktree folders.\n\
+         - Maintain PROGRESS.md in the task root: write your plan as a checklist and tick \
+           items as you complete them. It is the single source of progress for the human \
+           and for any agent that continues this task after you.\n\
          - Do NOT run git (or gh/glab). Commits, branches, merges and PRs are done by the human \
            through gcode — git commands are technically denied to you.\n\
          - Do NOT install dependencies unless the task explicitly requires it.\n\
