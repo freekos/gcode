@@ -107,16 +107,18 @@
             {#each f.hunks as h, hi (hi)}
               <div class="hh">{h.header}</div>
               {#each h.lines as l, li (li)}
-                <button
-                  class="dl {l.kind}"
-                  class:sel={inSelection(f.path, lineNo(l))}
-                  onclick={(e) => clickLine(f.path, lineNo(l), e)}
-                >
+                <div class="dl {l.kind}" class:sel={inSelection(f.path, lineNo(l))}>
+                  <button
+                    class="plus"
+                    data-tip="Комментировать (shift — диапазон)"
+                    aria-label="Комментировать строку"
+                    onclick={(e) => clickLine(f.path, lineNo(l), e)}
+                  >+</button>
                   <span class="no">{l.old_no ?? ""}</span>
                   <span class="no">{l.new_no ?? ""}</span>
                   <span class="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span>
                   <span class="txt">{l.text}</span>
-                </button>
+                </div>
               {/each}
             {/each}
           </div>
@@ -181,13 +183,9 @@
   .hh { font: 11px var(--font-mono); color: var(--text-muted); background: var(--surface-0); padding: 3px 10px; }
   .dl {
     display: grid;
-    grid-template-columns: 40px 40px 14px 1fr;
+    grid-template-columns: 20px 40px 40px 14px 1fr;
     gap: 6px;
-    border: 0;
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-    padding: 0 10px;
+    padding: 0 10px 0 4px;
     font: 12px var(--font-mono);
     line-height: 1.7;
     color: var(--text-secondary);
@@ -199,8 +197,28 @@
   .dl.add .txt { color: var(--diff-add); }
   .dl.del { background: var(--diff-del-bg); }
   .dl.del .txt { color: var(--diff-del); }
-  .dl:hover { filter: brightness(1.25); }
-  .dl.sel { outline: 1px solid var(--accent); outline-offset: -1px; background: var(--accent-soft); }
+  /* GitHub-style: a blue "+" appears in the gutter on hover — the row itself
+     is plain text (selectable); selection is a soft merged band, not per-row rings */
+  .plus {
+    visibility: hidden;
+    border: 0;
+    border-radius: 4px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font: 700 12px var(--font-ui);
+    line-height: 1;
+    width: 16px;
+    height: 16px;
+    align-self: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .dl:hover .plus { visibility: visible; }
+  .dl.sel {
+    background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .dl.sel .plus { visibility: visible; }
   .txt { overflow: hidden; text-overflow: ellipsis; }
   .cbox { padding: 10px; background: var(--surface-2); }
   .crange { color: var(--text-muted); margin-bottom: 6px; }
