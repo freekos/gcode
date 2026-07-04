@@ -449,7 +449,11 @@
         <div class="pnode">
           <div class="phead-wrap">
             <button class="phead" onclick={() => toggleProject(node.project.id)}>
-              <span class="chev" class:closed={collapsed[node.project.id]}>▾</span>
+              {#if collapsed[node.project.id]}
+                <svg class="ic pic" viewBox="0 0 16 16"><path d="M1.8 4.4c0-.7.5-1.2 1.2-1.2h2.7l1.3 1.5h5.2c.7 0 1.2.5 1.2 1.2v6c0 .7-.5 1.2-1.2 1.2H3c-.7 0-1.2-.5-1.2-1.2z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+              {:else}
+                <svg class="ic pic" viewBox="0 0 16 16"><path d="M1.8 12V4.4c0-.7.5-1.2 1.2-1.2h2.7l1.3 1.5h4.9c.7 0 1.2.5 1.2 1.2v.9" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M1.8 12l1.6-4.1c.2-.5.6-.8 1.1-.8h8.9c.8 0 1.4.8 1.1 1.6l-1.1 2.9c-.2.5-.6.8-1.1.8H2.2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+              {/if}
               <span class="pname2" class:pactive={project?.id === node.project.id}>{node.project.name}</span>
               <span class="pmeta">{node.tasks.length}</span>
             </button>
@@ -1114,11 +1118,7 @@
     color: var(--text-primary); width: 100%;
   }
 
-  .chev {
-    font-size: 9px; color: var(--text-muted); width: 12px;
-    transition: transform var(--t-fast) ease-out;
-  }
-  .chev.closed { transform: rotate(-90deg); }
+  .pic { width: 14px; height: 14px; }
   .pname2 { font-weight: 600; font-size: 12px; letter-spacing: .01em; }
   .pname2.pactive { color: var(--accent); }
   .pmeta { margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); }

@@ -62,13 +62,15 @@
 <style>
   /* drag zone: only the TOP strip of the window (mac convention), a bit tall
      so it's easy to grab — the 8px rim plus a slice of the top edge */
+  /* topmost thin band: the transparent .layout grid swallowed clicks meant for
+     a frame that sat BELOW it — the drag band must sit ABOVE the content */
   .win-frame {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: 22px;
-    z-index: 0;
+    height: 12px;
+    z-index: 500;
   }
   .window-rim {
     display: none;
