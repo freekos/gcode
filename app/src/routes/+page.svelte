@@ -116,6 +116,7 @@
   let diffSelecting = $state(false); // a line range is being commented
   // editor mode in the wide right panel (opens from diff file header / cmd-P)
   let editorOpen = $state(false);
+  let editorFrom: "diff" | null = $state(null); // panel to return to on close
   let editorRepo = $state("");
   let editorPath = $state("");
   let editorContent = $state("");
@@ -138,6 +139,7 @@
     editorScope = "task";
     editorRepo = repo;
     editorPath = path;
+    editorFrom = diffOpen ? "diff" : null;
     diffOpen = false;
     editorOpen = true;
     // the sidebar shows the task's worktrees (repos + their branches) meanwhile
@@ -181,6 +183,13 @@
     }
     if (!selected) return;
     fileWrite(selected.id, editorRepo, editorPath, text);
+  }
+
+  function closeEditor() {
+    editorOpen = false;
+    if (filesScope === "task") sbMode = "tasks";
+    if (editorFrom === "diff") diffOpen = true; // return to the diff it came from
+    editorFrom = null;
   }
 
   async function openFilePalette() {
@@ -475,8 +484,7 @@
         diffOpen = false;
       }
       if (e.key === "Escape" && editorOpen && !filePaletteOpen) {
-        editorOpen = false;
-        if (filesScope === "task") sbMode = "tasks";
+        closeEditor();
       } else if (e.key === "Escape" && sbMode === "files" && !paletteOpen && !addProjOpen) {
         sbMode = "tasks";
       }
@@ -642,7 +650,7 @@
     </div>
 
     {#if sbMode === "files" && (filesScope === "task" ? !!selected : !!filesProject)}
-      <button class="newtask" onclick={() => (sbMode = "tasks")}>
+      <button class="newtask" onclick={() => { if (editorOpen) closeEditor(); else sbMode = "tasks"; }}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M9.5 3.5 5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         К задачам
       </button>
@@ -813,7 +821,7 @@
         {/if}
       </div>
       {#if diffOpen || editorOpen}
-        <button class="iconbtn" data-tip="Закрыть панель · Esc" aria-label="Закрыть панель" onclick={() => { diffOpen = false; editorOpen = false; if (filesScope === "task") sbMode = "tasks"; }}>
+        <button class="iconbtn" data-tip="Закрыть панель · Esc" aria-label="Закрыть панель" onclick={() => { if (editorOpen) closeEditor(); else diffOpen = false; }}>
           <svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         </button>
       {/if}
