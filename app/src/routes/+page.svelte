@@ -1000,7 +1000,7 @@
     cursor: col-resize;
     z-index: 20;
   }
-  .sb-resize:hover { background: var(--accent-soft); }
+  .sb-resize:hover { background: var(--border-strong); }
   .demo {
     font-family: var(--font-mono);
     font-size: 10px;
