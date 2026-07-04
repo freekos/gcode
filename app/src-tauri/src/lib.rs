@@ -2,6 +2,8 @@
 //! All state access goes through the core's single-writer actor — the UI never
 //! touches SQLite or git directly.
 
+use gcode_core::engine::{AgentEvent, ClaudeEngine};
+use gcode_core::runner::run_thread;
 use gcode_core::{namer, provision, scan, KeyedQueues, State, StateHandle, TaskStatus};
 use serde::Serialize;
 use std::path::PathBuf;
@@ -146,6 +148,81 @@ fn task_create(
     Ok(())
 }
 
+#[derive(Serialize, Clone)]
+struct ThreadEvent {
+    task_id: i64,
+    kind: String, // "delta" | "tool" | "done"
+    text: String,
+    ok: Option<bool>,
+}
+
+/// Send a message to the task's agent (new thread or continue the latest one).
+/// Streams engine events to the window as "thread-event"; task status flows
+/// through the core runner (running -> review) and "tasks-changed" fires after.
+#[tauri::command]
+fn thread_send(
+    app_handle: AppHandle,
+    app: TState<'_, App>,
+    task_id: i64,
+    prompt: String,
+) -> Result<(), String> {
+    let latest = app
+        .handle
+        .call(move |st| st.list_threads(task_id))
+        .map_err(err_s)?
+        .into_iter()
+        .next();
+    let handle = app.handle.clone();
+    std::thread::spawn(move || {
+        let eng = ClaudeEngine::default();
+        let ah = app_handle.clone();
+        let res = run_thread(
+            &handle,
+            &eng,
+            task_id,
+            latest.map(|t| t.id),
+            &prompt,
+            &mut |ev| {
+                let payload = match ev {
+                    AgentEvent::TextDelta(t) | AgentEvent::WholeText(t) => ThreadEvent {
+                        task_id,
+                        kind: "delta".into(),
+                        text: t.clone(),
+                        ok: None,
+                    },
+                    AgentEvent::ToolUse(n) => ThreadEvent {
+                        task_id,
+                        kind: "tool".into(),
+                        text: n.clone(),
+                        ok: None,
+                    },
+                    AgentEvent::Done { ok, error } => ThreadEvent {
+                        task_id,
+                        kind: "done".into(),
+                        text: error.clone().unwrap_or_default(),
+                        ok: Some(*ok),
+                    },
+                    AgentEvent::Session(_) => return,
+                };
+                let _ = ah.emit("thread-event", payload);
+            },
+        );
+        if let Err(e) = res {
+            let _ = app_handle.emit(
+                "thread-event",
+                ThreadEvent {
+                    task_id,
+                    kind: "done".into(),
+                    text: e.to_string(),
+                    ok: Some(false),
+                },
+            );
+        }
+        let _ = app_handle.emit("tasks-changed", serde_json::json!({ "ok": true }));
+    });
+    Ok(())
+}
+
 #[tauri::command]
 fn task_set_status(app: TState<'_, App>, task_id: i64, status: String) -> Result<(), String> {
     let st = TaskStatus::parse(&status).ok_or_else(|| format!("unknown status {status}"))?;
@@ -173,6 +250,7 @@ pub fn run() {
             project_add,
             tasks_list,
             task_create,
+            thread_send,
             task_set_status
         ])
         .run(tauri::generate_context!())

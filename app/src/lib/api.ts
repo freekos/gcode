@@ -77,4 +77,37 @@ export async function onTasksChanged(cb: () => void): Promise<() => void> {
   return un;
 }
 
+export interface ThreadEvent {
+  task_id: number;
+  kind: "delta" | "tool" | "done";
+  text: string;
+  ok: boolean | null;
+}
+
+export async function threadSend(taskId: number, prompt: string): Promise<void> {
+  if (!inTauri) {
+    // demo: stream a scripted reply
+    const chunks = ["Смотрю код… ", "нашёл причину: ", "редирект собирался без webview-куки. ", "Исправил и добавил тест."];
+    const fire = (detail: ThreadEvent, delay: number) =>
+      setTimeout(() => window.dispatchEvent(new CustomEvent("demo-thread-event", { detail })), delay);
+    fire({ task_id: taskId, kind: "tool", text: "Read", ok: null }, 500);
+    chunks.forEach((c, i) => fire({ task_id: taskId, kind: "delta", text: c, ok: null }, 900 + i * 500));
+    fire({ task_id: taskId, kind: "tool", text: "Edit", ok: null }, 1600);
+    fire({ task_id: taskId, kind: "done", text: "", ok: true }, 900 + chunks.length * 500 + 300);
+    return;
+  }
+  return invoke<void>("thread_send", { taskId, prompt });
+}
+
+export async function onThreadEvent(cb: (e: ThreadEvent) => void): Promise<() => void> {
+  if (!inTauri) {
+    const h = (e: Event) => cb((e as CustomEvent<ThreadEvent>).detail);
+    window.addEventListener("demo-thread-event", h);
+    return () => window.removeEventListener("demo-thread-event", h);
+  }
+  const { listen } = await import("@tauri-apps/api/event");
+  const un = await listen<ThreadEvent>("thread-event", (ev) => cb(ev.payload));
+  return un;
+}
+
 export const isDemo = !inTauri;

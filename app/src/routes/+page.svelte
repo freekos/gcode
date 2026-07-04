@@ -9,11 +9,17 @@
     projectsList,
     tasksList,
     taskCreate,
+    threadSend,
+    onThreadEvent,
     onTasksChanged,
     isDemo,
     type Project,
     type Task,
+    type ThreadEvent,
   } from "$lib/api";
+
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error"; text: string };
+  type ThreadState = { items: ThreadItem[]; running: boolean; queue: string[] };
 
   let projects: Project[] = $state([]);
   let project: Project | undefined = $state();
@@ -24,6 +30,60 @@
   let createOpen = $state(false);
   let prompt = $state("");
   let creating = $state(false);
+
+  // per-task thread view state (history persistence comes later — engine owns transcripts)
+  let threads: Record<number, ThreadState> = $state({});
+  let msg = $state("");
+  let threadBox: HTMLElement | undefined = $state();
+
+  // mutating accessor — handlers only (never call from the template: Svelte
+  // forbids state mutation inside template expressions)
+  function th(id: number): ThreadState {
+    if (!threads[id]) threads[id] = { items: [], running: false, queue: [] };
+    return threads[id];
+  }
+  const EMPTY: ThreadState = { items: [], running: false, queue: [] };
+  const cur = $derived(selected ? (threads[selected.id] ?? EMPTY) : EMPTY);
+
+  function scrollDown() {
+    requestAnimationFrame(() => threadBox?.scrollTo({ top: threadBox.scrollHeight }));
+  }
+
+  function sendMsg() {
+    if (!selected || !msg.trim()) return;
+    const t = th(selected.id);
+    if (t.running) {
+      t.queue.push(msg.trim());
+    } else {
+      fire(selected.id, msg.trim());
+    }
+    msg = "";
+  }
+
+  function fire(taskId: number, prompt: string) {
+    const t = th(taskId);
+    t.items.push({ kind: "user", text: prompt });
+    t.running = true;
+    scrollDown();
+    threadSend(taskId, prompt);
+  }
+
+  function onEvent(e: ThreadEvent) {
+    const t = th(e.task_id);
+    if (e.kind === "delta") {
+      const last = t.items[t.items.length - 1];
+      if (last?.kind === "agent") last.text += e.text;
+      else t.items.push({ kind: "agent", text: e.text });
+    } else if (e.kind === "tool") {
+      t.items.push({ kind: "tool", text: e.text });
+    } else if (e.kind === "done") {
+      t.running = false;
+      if (e.ok === false) t.items.push({ kind: "error", text: e.text || "агент завершился с ошибкой" });
+      const next = t.queue.shift();
+      if (next) fire(e.task_id, next);
+    }
+    if (selected?.id === e.task_id) scrollDown();
+  }
 
   const attention = $derived(tasks.filter((t) => t.status === "needs_input" || t.status === "review"));
   const working = $derived(tasks.filter((t) => t.status === "running"));
@@ -43,10 +103,12 @@
     prompt = localStorage.getItem("gcode.draft.newtask") ?? "";
     reload();
     let un: (() => void) | undefined;
+    let unThread: (() => void) | undefined;
     onTasksChanged(() => {
       creating = false;
       reload();
     }).then((u) => (un = u));
+    onThreadEvent(onEvent).then((u) => (unThread = u));
 
     const onkey = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === "n") {
@@ -63,6 +125,7 @@
     return () => {
       window.removeEventListener("keydown", onkey);
       un?.();
+      unThread?.();
     };
   });
 
@@ -134,12 +197,48 @@
     {:else if selected}
       <div class="thread-head">
         <b>{selected.title}</b>
-        <Badge status={selected.status} />
+        <Badge status={cur.running ? "running" : selected.status} />
         <span class="branch">{selected.branch}</span>
       </div>
-      <div class="center-empty">
-        <p>Тред агента — следующий шаг фазы 3b.</p>
-        <p class="mut">Worktrees на месте: <span class="branch">.gcode/tasks/{selected.slug}/</span></p>
+      <div class="thread-box" bind:this={threadBox}>
+        {#if cur.items.length === 0}
+          <div class="center-empty">
+            <p class="mut">Скажи агенту, что делать — worktrees уже готовы:</p>
+            <p class="branch">.gcode/tasks/{selected.slug}/</p>
+          </div>
+        {:else}
+          {#each cur.items as it, i (i)}
+            {#if it.kind === "user"}
+              <div class="m-user">{it.text}</div>
+            {:else if it.kind === "agent"}
+              <div class="m-agent">{it.text}</div>
+            {:else if it.kind === "tool"}
+              <div class="m-tool">[{it.text}]</div>
+            {:else}
+              <div class="m-err">{it.text}</div>
+            {/if}
+          {/each}
+        {/if}
+      </div>
+      <div class="composer">
+        <textarea
+          bind:value={msg}
+          rows="2"
+          placeholder={cur.running ? "Агент работает — сообщение уйдёт следующим…" : "Сообщение агенту…"}
+          onkeydown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendMsg();
+            }
+          }}
+        ></textarea>
+        <div class="c-bar">
+          {#if cur.running}
+            <span class="queue-note">◐ агент работает{cur.queue.length ? ` · в очереди: ${cur.queue.length}` : ""}</span>
+          {/if}
+          <span style="flex:1"></span>
+          <Button variant="primary" onclick={sendMsg}>{cur.running ? "В очередь" : "Отправить"} ⏎</Button>
+        </div>
       </div>
     {:else}
       <div class="center-empty">
@@ -239,5 +338,20 @@
   }
   textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .modal-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .thread-box { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; }
+  .m-user {
+    align-self: flex-end;
+    background: var(--surface-2);
+    border-radius: var(--r-lg);
+    padding: 8px 12px;
+    max-width: 80%;
+  }
+  .m-agent { color: var(--text-primary); max-width: 92%; white-space: pre-wrap; }
+  .m-tool { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .m-err { color: var(--diff-del); font-size: 12.5px; }
+  .composer { border-top: 1px solid var(--border-subtle); padding: 12px 16px; }
+  .composer textarea { margin-bottom: 0; }
+  .c-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .queue-note { font-size: 11.5px; color: var(--status-running); }
   h3 { margin: 0 0 4px; font-size: 15px; }
 </style>
