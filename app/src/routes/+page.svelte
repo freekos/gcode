@@ -764,7 +764,7 @@
     <aside class="ctx ctx-diff">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="dp-head">
-        <div class="diff-toolbar" style="padding:0">
+        <div class="dp-chips">
           {#if ctx}
             {#each ctx.touched as r (r.repo)}
               <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
@@ -773,7 +773,6 @@
             {/each}
           {/if}
         </div>
-        <span style="flex:1"></span>
         <button class="iconbtn" data-tip="Закрыть · ⌘D" aria-label="Закрыть дифф" onclick={() => (diffOpen = false)}>✕</button>
       </div>
       <DiffView files={diffFiles} repo={diffRepo ?? ""} onsend={sendReview} />
@@ -964,7 +963,6 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
-  .diff-toolbar { display: flex; gap: 6px; padding: 10px 16px 0; flex-wrap: wrap; }
   .repo-chip {
     display: inline-flex; align-items: center; gap: 8px;
     background: var(--surface-1); border: 0; border-radius: 999px;
