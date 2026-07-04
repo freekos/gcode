@@ -240,4 +240,21 @@ export async function openUrl(url: string): Promise<void> {
   await openUrl(url);
 }
 
+/** Help -> Export logs: save the core journal to a chosen file. */
+export async function exportLogs(): Promise<string | null> {
+  if (!inTauri) {
+    const blob = new Blob(["gcode demo logs\n"], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "gcode-logs.txt";
+    a.click();
+    return "gcode-logs.txt";
+  }
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const path = await save({ defaultPath: "gcode-logs.txt", title: "Экспорт логов gcode" });
+  if (!path) return null;
+  await invoke<number>("logs_export", { path });
+  return path;
+}
+
 export const isDemo = !inTauri;

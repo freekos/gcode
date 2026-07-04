@@ -251,6 +251,25 @@ fn task_context(app: TState<'_, App>, task_id: i64) -> Result<gcode_core::contex
     gcode_core::context::task_context(&app.handle, task_id).map_err(err_s)
 }
 
+/// Export the core journal to a text file (Help -> Export logs).
+#[tauri::command]
+fn logs_export(app: TState<'_, App>, path: String) -> Result<usize, String> {
+    let lines = app
+        .handle
+        .call(|st| st.journal_recent(2000))
+        .map_err(err_s)?;
+    let mut out = String::from("gcode journal export\n\n");
+    for (ts, action, entity, detail) in &lines {
+        out.push_str(&format!(
+            "{ts}  {action:<20} {:<24} {}\n",
+            entity.clone().unwrap_or_default(),
+            detail.clone().unwrap_or_default()
+        ));
+    }
+    std::fs::write(&path, &out).map_err(|e| format!("cannot write {path}: {e}"))?;
+    Ok(lines.len())
+}
+
 #[tauri::command]
 fn task_set_status(app: TState<'_, App>, task_id: i64, status: String) -> Result<(), String> {
     let st = TaskStatus::parse(&status).ok_or_else(|| format!("unknown status {status}"))?;
@@ -294,6 +313,7 @@ pub fn run() {
             task_create,
             thread_send,
             task_context,
+            logs_export,
             task_set_status
         ])
         .run(tauri::generate_context!())

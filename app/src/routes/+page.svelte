@@ -19,6 +19,7 @@
     revealProject,
     checkUpdate,
     openUrl,
+    exportLogs,
     type UpdateInfo,
     type Project,
     type Task,
@@ -60,6 +61,15 @@
   let viewMenuOpen = $state(false);
   let upd: UpdateInfo | undefined = $state();
   let updOpen = $state(false);
+  let helpOpen = $state(false);
+
+  function revealCurrent() {
+    if (!project) return;
+    const path = selected
+      ? `${project.path}/.gcode/tasks/${selected.slug}`
+      : project.path;
+    revealProject(path);
+  }
 
   function startResize(e: PointerEvent) {
     e.preventDefault();
@@ -324,6 +334,7 @@
 <svelte:window
   onclick={(e) => {
     if (viewMenuOpen && !(e.target as HTMLElement).closest(".viewmenu-wrap")) viewMenuOpen = false;
+    if (helpOpen && !(e.target as HTMLElement).closest(".help-wrap")) helpOpen = false;
   }}
 />
 
@@ -466,6 +477,24 @@
   </aside>
 
   <div class="card">
+    <div class="card-actions">
+      <button class="iconbtn" data-tip={selected ? "Открыть задачу в Finder" : "Открыть проект в Finder"} aria-label="Открыть в Finder" onclick={revealCurrent}>
+        <svg class="ic" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+      </button>
+      <div class="help-wrap">
+        <button class="iconbtn" data-tip="Помощь" aria-label="Помощь" onclick={() => (helpOpen = !helpOpen)}>
+          <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M6.3 6.2c.2-1 1-1.6 1.9-1.5.9 0 1.7.7 1.7 1.6 0 1.2-1.6 1.4-1.9 2.4v.5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".7" fill="currentColor"/></svg>
+        </button>
+        {#if helpOpen}
+          <div class="viewmenu help-menu" role="menu">
+            <button class="vm-item" onclick={() => { helpOpen = false; openUrl("https://github.com/freekos/gcode/issues/new?labels=bug"); }}>Сообщить об ошибке</button>
+            <button class="vm-item" onclick={() => { helpOpen = false; openUrl("https://github.com/freekos/gcode/issues/new?labels=enhancement"); }}>Предложить фичу</button>
+            <button class="vm-item" onclick={() => { helpOpen = false; openUrl("https://github.com/freekos/gcode#readme"); }}>Документация</button>
+            <button class="vm-item" onclick={async () => { helpOpen = false; await exportLogs(); }}>Экспорт логов</button>
+          </div>
+        {/if}
+      </div>
+    </div>
   <main>
     {#if creating}
       <div class="center-empty">
@@ -682,6 +711,17 @@
     height: 100%;
   }
   .with-ctx .card { grid-template-columns: 1fr 230px; }
+  .card { position: relative; }
+  .card-actions {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 30;
+    display: inline-flex;
+    gap: 4px;
+  }
+  .help-wrap { position: relative; }
+  .help-menu { top: 30px; right: 0; left: auto; min-width: 210px; }
   :global(:root.native) .card {
     margin: 10px 14px 14px 0;
     height: calc(100vh - 24px);
