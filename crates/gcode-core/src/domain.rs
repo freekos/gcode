@@ -74,6 +74,7 @@ pub struct Task {
     pub status: TaskStatus,
     pub created_at: String,
     pub archived_at: Option<String>,
+    pub pinned: bool,
 }
 
 /// A visual grouping of tasks + an optional integration branch (target for explicit merges).

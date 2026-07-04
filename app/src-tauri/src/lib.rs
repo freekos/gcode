@@ -36,6 +36,7 @@ struct TaskDto {
     status: String,
     archived: bool,
     created_at: String,
+    pinned: bool,
 }
 
 fn err_s(e: impl std::fmt::Display) -> String {
@@ -117,6 +118,7 @@ fn tasks_list(
                     status: t.status.as_str().to_string(),
                     archived: t.archived_at.is_some(),
                     created_at: t.created_at,
+                    pinned: t.pinned,
                 })
                 .collect()
         })
@@ -158,6 +160,7 @@ fn task_create(
         status: task.status.as_str().to_string(),
         archived: false,
         created_at: task.created_at.clone(),
+        pinned: false,
     };
 
     // background: AI names it properly, then rename branch + title
@@ -344,6 +347,33 @@ fn logs_export(app: TState<'_, App>, path: String) -> Result<usize, String> {
 }
 
 #[tauri::command]
+fn task_pin(app: TState<'_, App>, task_id: i64, pinned: bool) -> Result<(), String> {
+    app.handle
+        .call(move |st| st.set_task_pinned(task_id, pinned))
+        .map_err(err_s)
+}
+
+/// Archive with the full core semantics: uncommitted work saved as patches,
+/// worktrees removed, branches kept. Kills the live session first.
+#[tauri::command]
+fn task_archive(app_handle: AppHandle, app: TState<'_, App>, task_id: i64) -> Result<(), String> {
+    if let Some(mut s) = app.sessions.lock().unwrap().remove(&task_id) {
+        s.kill();
+    }
+    let handle = app.handle.clone();
+    let queues = app.queues.clone();
+    std::thread::spawn(move || {
+        let res = gcode_core::archive::archive_task_full(&handle, &queues, task_id);
+        let payload = match res {
+            Ok(rep) => serde_json::json!({ "ok": true, "patches": rep.patches.len() }),
+            Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }),
+        };
+        let _ = app_handle.emit("tasks-changed", payload);
+    });
+    Ok(())
+}
+
+#[tauri::command]
 fn task_set_status(app: TState<'_, App>, task_id: i64, status: String) -> Result<(), String> {
     let st = TaskStatus::parse(&status).ok_or_else(|| format!("unknown status {status}"))?;
     app.handle
@@ -390,6 +420,8 @@ pub fn run() {
             thread_send,
             thread_history,
             task_context,
+            task_pin,
+            task_archive,
             logs_export,
             task_set_status
         ])

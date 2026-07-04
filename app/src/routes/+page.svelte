@@ -9,6 +9,8 @@
     projectsList,
     tasksList,
     taskCreate,
+    taskPin,
+    taskArchive,
     threadSend,
     onThreadEvent,
     onTasksChanged,
@@ -42,10 +44,13 @@
 
   const PRIORITY: Record<string, number> = { needs_input: 0, review: 1, running: 2, new: 3, done: 4 };
   function sortTasks(ts: Task[]): Task[] {
+    const pin = (t: Task) => (t.pinned ? 0 : 1);
     if (sortBy === "created") {
-      return [...ts].sort((a, b) => b.created_at.localeCompare(a.created_at));
+      return [...ts].sort((a, b) => pin(a) - pin(b) || b.created_at.localeCompare(a.created_at));
     }
-    return [...ts].sort((a, b) => (PRIORITY[a.status] ?? 9) - (PRIORITY[b.status] ?? 9));
+    return [...ts].sort(
+      (a, b) => pin(a) - pin(b) || (PRIORITY[a.status] ?? 9) - (PRIORITY[b.status] ?? 9),
+    );
   }
 
   let creating = $state(false);
@@ -476,7 +481,20 @@
               {:else}
                 {#each node.tasks as t (t.id)}
                   <div class:dim-arch={t.archived}>
-                    <TaskRow title={t.title} status={t.status} hotkey={hotkeyOf(t)} time={ago(t.created_at)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
+                    <TaskRow
+                      title={t.title}
+                      status={t.status}
+                      hotkey={hotkeyOf(t)}
+                      time={ago(t.created_at)}
+                      pinned={t.pinned}
+                      active={selected?.id === t.id}
+                      onclick={() => pick(t, node.project)}
+                      onpin={() => taskPin(t.id, !t.pinned)}
+                      onarchive={() => {
+                        if (selected?.id === t.id) selected = undefined;
+                        taskArchive(t.id);
+                      }}
+                    />
                   </div>
                 {/each}
               {/if}

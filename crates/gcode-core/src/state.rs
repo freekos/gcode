@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
 /// Current schema version. Bump together with a new `migrate_to_*` step.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 /// One journal line: (ts, action, entity, detail).
 pub type JournalEntry = (String, String, Option<String>, Option<String>);
@@ -115,6 +115,15 @@ impl State {
                 );
                 "#,
             )?;
+            tx.pragma_update(None, "user_version", 2)?;
+            tx.commit()?;
+        }
+        let v: i64 = self
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if v < 3 {
+            let tx = self.conn.transaction()?;
+            tx.execute_batch("ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;")?;
             tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             tx.commit()?;
         }
@@ -258,7 +267,7 @@ impl State {
     pub fn task_by_id(&self, id: i64) -> Result<Task> {
         self.conn
             .query_row(
-                "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at
+                "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at, pinned
                  FROM tasks WHERE id = ?1",
                 params![id],
                 Self::row_to_task,
@@ -270,7 +279,7 @@ impl State {
     pub fn task_by_slug(&self, project_id: i64, slug: &str) -> Result<Task> {
         self.conn
             .query_row(
-                "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at
+                "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at, pinned
                  FROM tasks WHERE project_id = ?1 AND slug = ?2",
                 params![project_id, slug],
                 Self::row_to_task,
@@ -291,17 +300,18 @@ impl State {
             status: TaskStatus::parse(&status_s).unwrap_or(TaskStatus::New),
             created_at: r.get(7)?,
             archived_at: r.get(8)?,
+            pinned: r.get::<_, i64>(9)? != 0,
         })
     }
 
     /// Active (non-archived) tasks of a project.
     pub fn list_tasks(&self, project_id: i64, include_archived: bool) -> Result<Vec<Task>> {
         let sql = if include_archived {
-            "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at
-             FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC"
+            "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at, pinned
+             FROM tasks WHERE project_id = ?1 ORDER BY pinned DESC, created_at DESC"
         } else {
-            "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at
-             FROM tasks WHERE project_id = ?1 AND archived_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, project_id, group_id, title, slug, branch, status, created_at, archived_at, pinned
+             FROM tasks WHERE project_id = ?1 AND archived_at IS NULL ORDER BY pinned DESC, created_at DESC"
         };
         let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt
@@ -335,6 +345,17 @@ impl State {
         let n = self.conn.execute(
             "UPDATE tasks SET branch = ?2 WHERE id = ?1",
             params![task_id, branch],
+        )?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("task #{task_id}")));
+        }
+        Ok(())
+    }
+
+    pub fn set_task_pinned(&mut self, task_id: i64, pinned: bool) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE tasks SET pinned = ?2 WHERE id = ?1",
+            params![task_id, pinned as i64],
         )?;
         if n == 0 {
             return Err(CoreError::NotFound(format!("task #{task_id}")));
@@ -791,13 +812,23 @@ mod tests {
     }
 
     #[test]
-    fn schema_migrates_to_v2() {
+    fn schema_migrates_to_latest() {
         let s = st();
         let v: i64 = s
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, SCHEMA_VERSION);
+        // pinned works end to end
+        let mut s = st();
+        let p = proj(&mut s);
+        let repos = s.project_repos(p.id).unwrap();
+        let t = s
+            .add_task(p.id, "A", "a", "a", &[(repos[0].id, "/x".into())])
+            .unwrap();
+        assert!(!t.pinned);
+        s.set_task_pinned(t.id, true).unwrap();
+        assert!(s.task_by_id(t.id).unwrap().pinned);
     }
 
     #[test]
