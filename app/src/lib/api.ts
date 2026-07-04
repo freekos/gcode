@@ -51,7 +51,13 @@ export async function projectsList(): Promise<Project[]> {
 }
 
 export async function projectAdd(path: string): Promise<Project> {
-  if (!inTauri) throw new Error("demo mode: запусти через Tauri");
+  if (!inTauri) {
+    const name = path.split("/").filter(Boolean).pop() ?? "project";
+    const p = { id: demoProjects.length + 1, name, path, repos: 1 };
+    demoProjects.push(p);
+    demoTaskSets[p.id] = [];
+    return p;
+  }
   return invoke<Project>("project_add", { path });
 }
 

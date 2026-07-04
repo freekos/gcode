@@ -14,6 +14,7 @@
     onTasksChanged,
     isDemo,
     taskContext,
+    projectAdd,
     type Project,
     type Task,
     type ThreadEvent,
@@ -51,6 +52,9 @@
     localStorage.setItem("gcode.sidebar.collapsed", JSON.stringify(collapsed));
   }
   let palQ = $state("");
+  let addProjOpen = $state(false);
+  let projPath = $state("");
+  let projErr = $state("");
   let msg = $state("");
   let threadBox: HTMLElement | undefined = $state();
 
@@ -196,6 +200,19 @@
     selected = t;
     project = p;
   }
+
+  async function submitAddProject() {
+    projErr = "";
+    try {
+      const p = await projectAdd(projPath.trim());
+      addProjOpen = false;
+      projPath = "";
+      project = p;
+      await reload();
+    } catch (e) {
+      projErr = String(e);
+    }
+  }
 </script>
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
@@ -215,7 +232,7 @@
     {#if tree.length === 0}
       <div class="empty-side">
         <p>Проектов пока нет.</p>
-        <p class="mut">gcode project add &lt;путь&gt;</p>
+        <Button variant="primary" onclick={() => (addProjOpen = true)}>+ Добавить проект</Button>
       </div>
     {:else}
       {#each tree as node (node.project.id)}
@@ -238,6 +255,9 @@
           {/if}
         </div>
       {/each}
+      <button class="newtask addproj" onclick={() => (addProjOpen = true)}>
+        <span class="plus">＋</span> проект
+      </button>
     {/if}
   </aside>
 
@@ -336,7 +356,31 @@
       {/if}
     </aside>
   {/if}
+  <div class="statusbar">
+    <span>{tree.length} проектов · {ordered.length} задач</span>
+    <span>● {Object.values(threads).filter((t) => t.running).length} агентов работают</span>
+    <span style="margin-left:auto">gcode 0.1</span>
+  </div>
 </div>
+
+<Modal bind:open={addProjOpen} width="520px">
+  <h3>Добавить проект</h3>
+  <p class="mut" style="margin:0 0 12px">Путь к папке, где лежат git-репозитории проекта (или к одному репо).</p>
+  <input
+    class="pal-input mono-input"
+    placeholder="/Users/you/Codebase/work/azi"
+    bind:value={projPath}
+    onkeydown={(e) => {
+      if (e.key === "Enter") submitAddProject();
+    }}
+  />
+  {#if projErr}<p class="perr">{projErr}</p>{/if}
+  <div class="modal-bar">
+    <span style="flex:1"></span>
+    <Button variant="ghost" onclick={() => (addProjOpen = false)}>Закрыть</Button>
+    <Button variant="primary" onclick={submitAddProject}>Добавить</Button>
+  </div>
+</Modal>
 
 <Modal bind:open={paletteOpen} width="480px">
   <input
@@ -347,6 +391,7 @@
   <div class="pal-list">
     {#each [
       { label: "Новая задача", hint: "⌘N", act: () => { paletteOpen = false; createOpen = true; } },
+      { label: "Добавить проект", hint: "", act: () => { paletteOpen = false; addProjOpen = true; } },
       { label: "Styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
       ...ordered.map((t) => ({ label: t.title, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
     ].filter((c) => c.label.toLowerCase().includes(palQ.toLowerCase())) as c (c.label)}
@@ -382,9 +427,24 @@
   .layout {
     display: grid;
     grid-template-columns: 260px 1fr;
+    grid-template-rows: 1fr auto;
     height: 100vh;
   }
   .layout.with-ctx { grid-template-columns: 260px 1fr 230px; }
+  .statusbar {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    border-top: 1px solid var(--border-subtle);
+    padding: 4px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .addproj { margin-top: 4px; }
+  .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
+  .perr { color: var(--diff-del); font-size: 12px; margin: 6px 0 0; }
   aside {
     background: var(--surface-1);
     border-right: 1px solid var(--border-subtle);
