@@ -412,6 +412,15 @@ fn project_dir_list(
 }
 
 #[tauri::command]
+fn task_dir_list(
+    app: TState<'_, App>,
+    task_id: i64,
+    rel: String,
+) -> Result<Vec<gcode_core::files::DirEntry>, String> {
+    gcode_core::files::task_list_dir(&app.handle, task_id, &rel).map_err(err_s)
+}
+
+#[tauri::command]
 fn project_file_read(app: TState<'_, App>, project_id: i64, rel: String) -> Result<String, String> {
     gcode_core::files::project_read_file(&app.handle, project_id, &rel).map_err(err_s)
 }
@@ -508,6 +517,7 @@ pub fn run() {
             file_write,
             files_list,
             project_dir_list,
+            task_dir_list,
             project_file_read,
             project_file_write,
             logs_export,

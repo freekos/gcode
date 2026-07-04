@@ -1,15 +1,15 @@
 <script lang="ts">
   import FileTree from "./FileTree.svelte";
-  import { projectDirList, type DirEntry } from "$lib/api";
+  import type { DirEntry } from "$lib/api";
 
-  // Lazy directory tree of the project's WORKING COPY (branch badges on repos).
+  // Lazy directory tree (project working copy OR task worktrees — the lister decides).
   let {
-    projectId,
+    lister,
     rel = "",
     depth = 0,
     onopen,
   }: {
-    projectId: number;
+    lister: (rel: string) => Promise<DirEntry[]>;
     rel?: string;
     depth?: number;
     onopen: (rel: string) => void;
@@ -19,7 +19,7 @@
   let expanded: Record<string, boolean> = $state({});
 
   $effect(() => {
-    projectDirList(projectId, rel).then((e) => (entries = e));
+    lister(rel).then((e) => (entries = e));
   });
 </script>
 
@@ -39,7 +39,7 @@
         {#if e.branch}<span class="br">{e.branch}</span>{/if}
       </button>
       {#if expanded[e.name]}
-        <FileTree {projectId} rel={childRel} depth={depth + 1} {onopen} />
+        <FileTree {lister} rel={childRel} depth={depth + 1} {onopen} />
       {/if}
     {:else}
       <button class="ft-row" style="padding-left:{depth * 14 + 22}px" onclick={() => onopen(childRel)}>

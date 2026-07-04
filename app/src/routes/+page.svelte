@@ -25,6 +25,8 @@
     filesList,
     projectFileRead,
     projectFileWrite,
+    projectDirList,
+    taskDirList,
     projectAdd,
     pickFolder,
     revealProject,
@@ -120,6 +122,7 @@
   let editorScope: "task" | "project" = $state("task");
   // sidebar "Show files" mode (ZCode-style): the tree shows the WORKING COPY
   let sbMode: "tasks" | "files" = $state("tasks");
+  let filesScope: "project" | "task" = $state("project");
   let filesProject: Project | undefined = $state();
   let filePaletteOpen = $state(false);
   let fileQ = $state("");
@@ -137,7 +140,9 @@
     editorPath = path;
     diffOpen = false;
     editorOpen = true;
-    if (fileList.length === 0) fileList = await filesList(selected.id);
+    // the sidebar shows the task's worktrees (repos + their branches) meanwhile
+    filesScope = "task";
+    sbMode = "files";
   }
 
   async function openProjectFile(rel: string) {
@@ -448,6 +453,7 @@
       }
       if (e.key === "Escape" && editorOpen && !filePaletteOpen) {
         editorOpen = false;
+        if (filesScope === "task") sbMode = "tasks";
       } else if (e.key === "Escape" && sbMode === "files" && !paletteOpen && !addProjOpen) {
         sbMode = "tasks";
       }
@@ -612,7 +618,7 @@
       {/if}
     </div>
 
-    {#if sbMode === "files" && filesProject}
+    {#if sbMode === "files" && (filesScope === "task" ? !!selected : !!filesProject)}
       <button class="newtask" onclick={() => (sbMode = "tasks")}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M9.5 3.5 5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         К задачам
@@ -620,15 +626,18 @@
       <div class="sb-head">
         <span class="seg">
           <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
-          {filesProject.name} · файлы
+          {filesScope === "task" ? `${selected?.title ?? ""} · worktrees` : `${filesProject?.name} · файлы`}
         </span>
         <span style="flex:1"></span>
-        <button class="iconbtn" data-tip="Открыть в Finder" aria-label="Открыть в Finder" onclick={() => filesProject && revealProject(filesProject.path)}>
-          <svg class="ic" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>
-        </button>
       </div>
       <div class="ft-wrap">
-        <FileTree projectId={filesProject.id} onopen={openProjectFile} />
+        {#if filesScope === "task" && selected}
+          {#key selected.id}
+            <FileTree lister={(rel) => taskDirList(selected!.id, rel)} onopen={(rel) => { const [r, ...rest] = rel.split("/"); openEditor(r, rest.join("/")); }} />
+          {/key}
+        {:else if filesProject}
+          <FileTree lister={(rel) => projectDirList(filesProject!.id, rel)} onopen={openProjectFile} />
+        {/if}
       </div>
     {:else}
     <button class="newtask" onclick={() => goHub()}>
@@ -699,7 +708,7 @@
               <button class="iconbtn sm" data-tip="Открыть папку" aria-label="Открыть папку" onclick={() => revealProject(node.project.path)}>
                 <svg class="ic" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>
               </button>
-              <button class="iconbtn sm" data-tip="Показать файлы" aria-label="Показать файлы" onclick={() => { filesProject = node.project; sbMode = "files"; }}>
+              <button class="iconbtn sm" data-tip="Показать файлы" aria-label="Показать файлы" onclick={() => { filesProject = node.project; filesScope = "project"; sbMode = "files"; }}>
                 <svg class="ic" viewBox="0 0 16 16"><path d="M3 3.5h4M3 8h2.5M3 12.5h2.5M8 8h5M8 12.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M5.5 3.5v9" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/></svg>
               </button>
               <button class="iconbtn sm" data-tip="Новая задача" aria-label="Новая задача" onclick={() => goHub(node.project.id)}>
@@ -773,7 +782,7 @@
         {/if}
       </div>
       {#if diffOpen || editorOpen}
-        <button class="iconbtn" data-tip="Закрыть панель · Esc" aria-label="Закрыть панель" onclick={() => { diffOpen = false; editorOpen = false; }}>
+        <button class="iconbtn" data-tip="Закрыть панель · Esc" aria-label="Закрыть панель" onclick={() => { diffOpen = false; editorOpen = false; if (filesScope === "task") sbMode = "tasks"; }}>
           <svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         </button>
       {/if}
@@ -961,20 +970,6 @@
   {#if editorOpen}
     <aside class="ctx ctx-diff">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
-      <div class="ed-split">
-        {#if editorScope === "task" && selected}
-          <div class="ed-tree">
-            <div class="grp" style="margin:4px 8px 6px">Файлы задачи</div>
-            {#each fileList as f (f)}
-              {@const [r, ...rest] = f.split("/")}
-              <button
-                class="ed-file"
-                class:on={r === editorRepo && rest.join("/") === editorPath}
-                onclick={() => openEditor(r, rest.join("/"))}
-              >{f}</button>
-            {/each}
-          </div>
-        {/if}
       {#key `${editorRepo}/${editorPath}`}
         <Editor
           content={editorContent}
@@ -990,7 +985,6 @@
             : undefined}
         />
       {/key}
-      </div>
     </aside>
   {:else if selected && diffOpen}
     <aside class="ctx ctx-diff">
@@ -1609,32 +1603,6 @@
     margin: 4px 0 0;
   }
   .m-stop { color: var(--text-muted); font-size: 12px; }
-  .ed-split { display: flex; flex: 1; min-height: 0; }
-  .ed-split :global(.ed-wrap) { flex: 1; min-width: 0; }
-  .ed-tree {
-    width: 200px;
-    flex: none;
-    overflow-y: auto;
-    border-right: 1px solid var(--border-subtle);
-    padding: 4px;
-  }
-  .ed-file {
-    display: block;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    font: 11.5px var(--font-mono);
-    text-align: left;
-    padding: 3.5px 8px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ed-file:hover { background: var(--surface-2); color: var(--text-primary); }
-  .ed-file.on { background: var(--accent-soft); color: var(--text-primary); }
   .m-turn {
     display: flex;
     align-items: center;

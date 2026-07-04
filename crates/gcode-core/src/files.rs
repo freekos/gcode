@@ -145,6 +145,60 @@ pub fn project_write_file(
     std::fs::write(&p, content).map_err(|e| CoreError::Invalid(e.to_string()))
 }
 
+/// One directory level of a TASK's worktrees. rel="" lists the repos (each
+/// badged with its worktree branch); deeper levels read the worktree fs.
+pub fn task_list_dir(handle: &StateHandle, task_id: i64, rel: &str) -> Result<Vec<DirEntry>> {
+    let trs = handle.call(move |st| st.task_repos(task_id))?;
+    if rel.is_empty() {
+        let mut out = vec![];
+        for tr in &trs {
+            let wt = Path::new(&tr.worktree_path);
+            if !wt.is_dir() {
+                continue;
+            }
+            let branch = git::run_git(wt, &["branch", "--show-current"])
+                .ok()
+                .map(|b| b.trim().to_string())
+                .filter(|b| !b.is_empty());
+            out.push(DirEntry {
+                name: tr.repo_name.clone(),
+                is_dir: true,
+                branch,
+            });
+        }
+        return Ok(out);
+    }
+    let (repo, rest) = rel.split_once('/').unwrap_or((rel, ""));
+    let tr = trs
+        .iter()
+        .find(|t| t.repo_name == repo)
+        .ok_or_else(|| CoreError::NotFound(format!("repo '{repo}' in task #{task_id}")))?;
+    let root = PathBuf::from(&tr.worktree_path);
+    let dir = if rest.is_empty() {
+        root
+    } else {
+        safe_join(&root, rest)?
+    };
+    let mut out = vec![];
+    for e in std::fs::read_dir(&dir)
+        .map_err(|e| CoreError::NotFound(e.to_string()))?
+        .flatten()
+    {
+        let name = e.file_name().to_string_lossy().to_string();
+        if HIDDEN.contains(&name.as_str()) {
+            continue;
+        }
+        let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        out.push(DirEntry {
+            name,
+            is_dir,
+            branch: None,
+        });
+    }
+    out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

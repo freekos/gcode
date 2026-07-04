@@ -353,3 +353,18 @@ fn project_tree_shows_branch_badges_and_edits() {
     // escapes rejected
     assert!(project_read_file(&h, pid, "../evil").is_err());
 }
+
+#[test]
+fn task_tree_shows_repos_with_task_branch() {
+    use gcode_core::files::task_list_dir;
+    let (h, q, _tmp) = setup();
+    let res = provision_task(&h, &q, "azi", "Tree probe", &[]).unwrap();
+    let top = task_list_dir(&h, res.task.id, "").unwrap();
+    let server = top
+        .iter()
+        .find(|e| e.name == "server")
+        .expect("server worktree");
+    assert_eq!(server.branch.as_deref(), Some(res.task.branch.as_str()));
+    let inner = task_list_dir(&h, res.task.id, "server").unwrap();
+    assert!(inner.iter().any(|e| e.name == "README.md"));
+}

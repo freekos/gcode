@@ -367,6 +367,22 @@ export async function projectDirList(projectId: number, rel: string): Promise<Di
   return invoke<DirEntry[]>("project_dir_list", { projectId, rel });
 }
 
+export async function taskDirList(taskId: number, rel: string): Promise<DirEntry[]> {
+  if (!inTauri) {
+    if (rel === "") return [
+      { name: "server", is_dir: true, branch: "fix-login-redirect" },
+      { name: "crm", is_dir: true, branch: "fix-login-redirect" },
+    ];
+    if (rel === "server") return [
+      { name: "src", is_dir: true, branch: null },
+      { name: "README.md", is_dir: false, branch: null },
+    ];
+    if (rel === "server/src") return [{ name: "auth.ts", is_dir: false, branch: null }];
+    return [];
+  }
+  return invoke<DirEntry[]>("task_dir_list", { taskId, rel });
+}
+
 export async function projectFileRead(projectId: number, rel: string): Promise<string> {
   if (!inTauri) return `// demo project file ${rel}\n`;
   return invoke<string>("project_file_read", { projectId, rel });
