@@ -36,7 +36,7 @@
   import DiffView, { type PendingComment, type DiffGroup } from "$lib/components/DiffView.svelte";
   import { autogrow } from "$lib/actions";
 
-  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn"; text: string };
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review"; text: string };
   type ThreadState = {
     items: ThreadItem[];
     running: boolean;
@@ -125,8 +125,18 @@
     );
     const msg = `Ревью изменений (${comments.length} комм.):\n\n${parts.join("\n\n")}\n\nПоправь по комментариям.`;
     diffOpen = false;
-    if (th(selected.id).running) th(selected.id).queue.push(msg);
-    else fire(selected.id, msg);
+    const t = th(selected.id);
+    // the human sees a structured card; the agent receives the full markdown
+    t.items.push({ kind: "review", text: JSON.stringify(comments) });
+    if (t.running) {
+      t.queue.push(msg);
+    } else {
+      t.running = true;
+      t.waiting = true;
+      t.turnStart = Date.now();
+      scrollDown();
+      threadSend(selected.id, msg);
+    }
   }
 
   function revealCurrent() {
@@ -665,6 +675,21 @@
               <div class="m-user">{b.item.text}</div>
             {:else if b.item.kind === "agent"}
               <div class="m-agent">{#each inlineSegs(b.item.text) as seg, si (si)}{#if seg.code}<code class="mchip">{seg.t}</code>{:else}{seg.t}{/if}{/each}</div>
+            {:else if b.item.kind === "review"}
+              {@const revs = JSON.parse(b.item.text)}
+              <div class="m-review">
+                <div class="rv-head">Ревью · {revs.length} комм.</div>
+                {#each revs as rc, ri (ri)}
+                  <div class="rv-item">
+                    <span class="mono rv-loc">{rc.repo}/{rc.file}:{rc.from}{rc.to !== rc.from ? `–${rc.to}` : ""}</span>
+                    <p class="rv-text">{rc.text}</p>
+                    <details class="rv-code">
+                      <summary>код</summary>
+                      <pre>{rc.code}</pre>
+                    </details>
+                  </div>
+                {/each}
+              </div>
             {:else if b.item.kind === "turn"}
               <div class="m-turn"><span>Работал {b.item.text}</span><span class="tline"></span></div>
             {:else}
@@ -783,6 +808,9 @@
     <aside class="ctx">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
+      {#if ctx && ctx.touched.length > 0}
+        <button class="all-diff" onclick={() => openDiff(null)}>Все изменения задачи →</button>
+      {/if}
       {#if ctx && ctx.touched.length}
         {#each ctx.touched as r (r.repo)}
           <button class="repo repo-btn" onclick={() => openDiff(r.repo)} data-tip="Открыть дифф" aria-label="Открыть дифф">
@@ -973,6 +1001,20 @@
   }
   .repo-chip.on { background: var(--accent-soft); color: var(--text-primary); }
   .repo-btn { width: 100%; border: 0; text-align: left; cursor: pointer; }
+  .all-diff {
+    width: 100%;
+    background: var(--accent-soft);
+    border: 0;
+    border-radius: var(--r-md);
+    color: var(--text-primary);
+    font: 500 12px var(--font-ui);
+    padding: 7px 10px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    text-align: left;
+    transition: filter var(--t-fast) ease-out;
+  }
+  .all-diff:hover { filter: brightness(1.15); }
   .repo-btn:hover { background: var(--surface-3); }
   .skel {
     display: inline-block;
@@ -1284,6 +1326,28 @@
     background: var(--surface-2);
     border-radius: 6px;
     padding: 1px 7px;
+  }
+  .m-review {
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg);
+    padding: 10px 14px;
+    max-width: 66% !important;
+    margin-right: 0 !important;
+  }
+  .rv-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
+  .rv-item { margin-bottom: 8px; }
+  .rv-item:last-child { margin-bottom: 0; }
+  .rv-loc { font-size: 11px; color: var(--accent); }
+  .rv-text { margin: 3px 0 4px; }
+  .rv-code summary { font-size: 11px; color: var(--text-muted); cursor: pointer; }
+  .rv-code pre {
+    font: 11px var(--font-mono);
+    background: var(--surface-0);
+    border-radius: var(--r-md);
+    padding: 8px 10px;
+    overflow-x: auto;
+    margin: 4px 0 0;
   }
   .m-turn {
     display: flex;
