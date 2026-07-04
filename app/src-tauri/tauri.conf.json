@@ -13,9 +13,13 @@
     "windows": [
       {
         "title": "gcode",
-        "width": 800,
-        "height": 600,
-        "transparent": true
+        "width": 1280,
+        "height": 820,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "minWidth": 980,
+        "minHeight": 620
       }
     ],
     "security": {

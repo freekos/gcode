@@ -314,10 +314,7 @@
 
 <div class="layout" class:with-ctx={!!selected} style="--sbw:{sbw}px">
   <aside>
-    <div class="proj">
-      <span class="pname">g<b style="color:var(--accent)">code</b></span>
-      {#if isDemo}<span class="demo">demo</span>{/if}
-    </div>
+    <div class="drag-strip" data-tauri-drag-region></div>
 
     <button class="newtask" onclick={() => (createOpen = true)}>
       <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 5.2v5.6M5.2 8h5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -360,6 +357,14 @@
         <span class="plus">＋</span> проект
       </button>
     {/if}
+    <div class="sb-bottom">
+      <button class="newtask" style="margin:0" title="Настройки · ⌘, (скоро)">
+        <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+        Настройки
+      </button>
+      {#if isDemo}<span class="demo">demo</span>{/if}
+      <span class="tok" style="margin-left:auto">0.1</span>
+    </div>
     <div class="sb-resize" role="separator" aria-orientation="vertical" aria-label="Ширина сайдбара" onpointerdown={startResize}></div>
   </aside>
 
@@ -433,11 +438,15 @@
         <p class="hub-greet">{greet()}</p>
         <div class="hub-box">
           <div class="hub-proj">
-            <select bind:value={project} class="proj-pick">
-              {#each tree as n (n.project.id)}
-                <option value={n.project}>📁 {n.project.name}</option>
-              {/each}
-            </select>
+            <span class="proj-chip">
+              <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+              <select bind:value={project} class="proj-pick">
+                {#each tree as n (n.project.id)}
+                  <option value={n.project}>{n.project.name}</option>
+                {/each}
+              </select>
+              <span class="chev2">⌄</span>
+            </span>
           </div>
           <textarea
             bind:value={hubPrompt}
@@ -578,6 +587,16 @@
   }
   .addproj { margin-top: 4px; }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
+  .drag-strip { height: 26px; flex: none; margin: -12px -12px 0; }
+  .sb-bottom {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .tok { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
   .ic { width: 15px; height: 15px; color: var(--text-muted); flex: none; }
   .newtask:hover .ic { color: var(--text-secondary); }
   .hub {
@@ -594,20 +613,34 @@
     width: min(640px, 100%);
     background: var(--surface-1);
     border: 1px solid var(--border-subtle);
-    border-radius: 14px;
-    padding: 10px 12px;
+    border-radius: var(--r-xl);
+    padding: 12px 14px;
   }
+  :global(:root.native) .hub-box { background: var(--surface-2); }
   .hub-proj { margin-bottom: 6px; }
-  .proj-pick {
-    font: 500 12px var(--font-ui);
-    color: var(--text-secondary);
-    background: var(--surface-2);
+  .proj-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-3);
     border: 1px solid var(--border-subtle);
     border-radius: 999px;
     padding: 3px 10px;
-    cursor: pointer;
+    color: var(--text-secondary);
   }
-  .proj-pick:focus-visible { outline: 2px solid var(--accent); }
+  .proj-pick {
+    font: 500 12px var(--font-ui);
+    color: var(--text-secondary);
+    background: transparent;
+    border: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    padding-right: 2px;
+  }
+  .proj-pick:focus-visible { outline: none; }
+  .proj-chip:focus-within { border-color: var(--accent); }
+  .chev2 { font-size: 10px; color: var(--text-muted); margin-top: -2px; }
   .hub-box textarea {
     width: 100%;
     border: 0;
@@ -661,8 +694,6 @@
     z-index: 20;
   }
   .sb-resize:hover { background: var(--accent-soft); }
-  .proj { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
-  .pname { font-weight: 700; font-size: 14px; font-family: var(--font-mono); }
   .demo {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -672,12 +703,12 @@
     padding: 0 7px;
   }
   .newtask {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 9px;
     background: transparent; border: 0; cursor: pointer;
-    color: var(--text-secondary); font: 500 12.5px var(--font-ui);
-    padding: 6px 8px; border-radius: var(--r-md); text-align: left;
+    color: var(--text-secondary); font: 500 13px var(--font-ui);
+    padding: 8px 9px; border-radius: var(--r-md); text-align: left;
     transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
   }
   .newtask:hover { background: var(--surface-2); color: var(--text-primary); }
   .newtask .plus { color: var(--accent); font-weight: 700; }

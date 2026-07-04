@@ -35,10 +35,10 @@
     background: transparent;
     border: 0;
     border-radius: var(--r-md);
-    padding: 5px 8px;
+    padding: 7px 9px;
     cursor: pointer;
     color: var(--text-secondary);
-    font: 12.5px var(--font-ui);
+    font: 13px var(--font-ui);
     text-align: left;
     transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
   }

@@ -44,7 +44,7 @@
     background: var(--surface-3);
     color: var(--text-primary);
     border: 1px solid var(--border-strong);
-    border-radius: 12px;
+    border-radius: var(--r-xl);
     padding: 20px 22px;
     box-shadow: 0 24px 60px oklch(0% 0 0 / 0.5);
   }
