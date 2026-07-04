@@ -279,6 +279,7 @@
       <button class="sw" aria-pressed="false" style="background:oklch(64% .18 295)" data-l="64%" data-c=".18" data-h="295" title="Фиолетовый"></button>
       <button class="sw" aria-pressed="false" style="background:oklch(75% .14 75)"  data-l="75%" data-c=".14" data-h="75"  title="Янтарный"></button>
       <button class="sw" aria-pressed="false" style="background:oklch(72% .15 155)" data-l="72%" data-c=".15" data-h="155" title="Зелёный"></button>
+      <button id="quiet" class="engine-pick" aria-pressed="true" style="margin-left:8px" title="Насыщенность акцента">тихий ✓</button>
     </div>
   </div>
 </header>
@@ -535,13 +536,26 @@
 
 <script>
   const root = document.documentElement;
+  const acc = { l: '66%', c: 0.16, h: 250, quiet: true };
+  function applyAccent() {
+    const c = acc.quiet ? (acc.c * 0.62).toFixed(3) : acc.c;
+    root.style.setProperty('--accent', `oklch(${acc.l} ${c} ${acc.h})`);
+    root.style.setProperty('--accent-soft', `oklch(${acc.l} ${c} ${acc.h} / .16)`);
+  }
   document.querySelectorAll('.sw').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', 'false'));
       btn.setAttribute('aria-pressed', 'true');
-      const { l, c, h } = btn.dataset;
-      root.style.setProperty('--accent', `oklch(${l} ${c} ${h})`);
-      root.style.setProperty('--accent-soft', `oklch(${l} ${c} ${h} / .16)`);
+      acc.l = btn.dataset.l; acc.c = parseFloat(btn.dataset.c); acc.h = btn.dataset.h;
+      applyAccent();
     });
   });
+  const quietBtn = document.getElementById('quiet');
+  quietBtn.addEventListener('click', () => {
+    acc.quiet = !acc.quiet;
+    quietBtn.textContent = acc.quiet ? 'тихий ✓' : 'яркий';
+    quietBtn.setAttribute('aria-pressed', String(acc.quiet));
+    applyAccent();
+  });
+  applyAccent(); // стартуем в тихом режиме — рекомендация
 </script>
