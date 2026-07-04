@@ -296,11 +296,13 @@ pub fn run() {
             // macOS: translucent sidebar material behind transparent regions
             #[cfg(target_os = "macos")]
             if let Some(w) = app.get_webview_window("main") {
+                // rounded corners for the vibrancy layer itself — a transparent
+                // window loses the system rounding, leaving square glass corners
                 let _ = window_vibrancy::apply_vibrancy(
                     &w,
                     window_vibrancy::NSVisualEffectMaterial::Sidebar,
                     None,
-                    None,
+                    Some(14.0),
                 );
             }
             Ok(())
