@@ -1,4 +1,5 @@
 [workspace]
+exclude = ["app/src-tauri"]
 resolver = "2"
 members = ["crates/gcode-core", "crates/gcode-cli"]
 

@@ -1,0 +1,55 @@
+/* gcode design tokens — the single source of truth.
+   Canon: docs/design/design-system.md (approved 2026-07-04).
+   Three tiers: primitives live here as raw oklch values inside semantic tokens
+   (palette is generated from base/accent/contrast — Linear recipe); components
+   consume ONLY semantic tokens. Dark is the primary theme; a light theme later
+   remaps these same semantic tokens. */
+
+:root {
+  /* surfaces — 4 elevation levels */
+  --surface-0: oklch(16.5% 0.012 262);
+  --surface-1: oklch(19.5% 0.014 262);
+  --surface-2: oklch(23.5% 0.016 262);
+  --surface-3: oklch(28% 0.018 262);
+
+  --border-subtle: oklch(32% 0.02 262 / 0.6);
+  --border-strong: oklch(42% 0.02 262 / 0.8);
+
+  /* text */
+  --text-primary: oklch(93% 0.008 262);
+  --text-secondary: oklch(72% 0.012 262);
+  --text-muted: oklch(55% 0.014 262);
+  --text-disabled: oklch(42% 0.012 262);
+
+  /* accent — QUIET by decision: chroma 0.10 (bright would fight the statuses).
+     Used ONLY for: focus ring, selection, one primary button, "next" step. */
+  --accent: oklch(66% 0.1 250);
+  --accent-soft: oklch(66% 0.1 250 / 0.16);
+  --on-accent: oklch(15% 0.02 262);
+
+  /* statuses — the only loud colors in the UI */
+  --status-new: oklch(60% 0.02 262);
+  --status-running: oklch(75% 0.14 75);
+  --status-needs-input: oklch(70% 0.17 45);
+  --status-review: oklch(68% 0.15 255);
+  --status-done: oklch(72% 0.15 155);
+
+  /* diffs */
+  --diff-add: oklch(70% 0.14 155);
+  --diff-add-bg: oklch(70% 0.14 155 / 0.12);
+  --diff-del: oklch(64% 0.19 25);
+  --diff-del-bg: oklch(64% 0.19 25 / 0.12);
+
+  /* type */
+  --font-ui: "Inter Variable", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* geometry & motion */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --t-fast: 120ms;
+  --t-base: 160ms;
+
+  color-scheme: dark;
+}
