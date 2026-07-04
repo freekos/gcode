@@ -22,9 +22,11 @@
   let {
     groups,
     onsend,
+    onselchange,
   }: {
     groups: DiffGroup[];
     onsend: (comments: PendingComment[]) => void;
+    onselchange?: (selecting: boolean) => void;
   } = $props();
 
   let collapsedFiles: Record<string, boolean> = $state({});
@@ -54,6 +56,7 @@
       selTo = no;
     }
     composerAt = `${repo}\u0000${file}`;
+    onselchange?.(true);
   }
 
   function inSelection(repo: string, file: string, no: number | null): boolean {
@@ -99,6 +102,7 @@
     selFile = null;
     selFrom = selTo = null;
     commentText = "";
+    onselchange?.(false);
   }
 </script>
 

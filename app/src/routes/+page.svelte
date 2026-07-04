@@ -102,6 +102,7 @@
   let updOpen = $state(false);
   let helpOpen = $state(false);
   let diffOpen = $state(false);
+  let diffSelecting = $state(false); // a line range is being commented
   let diffRepo: string | null = $state(null); // null = все репо
   let diffGroups: DiffGroup[] = $state([]);
 
@@ -332,6 +333,9 @@
       if (e.metaKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
         if (selected) diffOpen ? (diffOpen = false) : openDiff();
+      }
+      if (e.key === "Escape" && diffOpen && !diffSelecting && !paletteOpen && !addProjOpen) {
+        diffOpen = false;
       }
       if (e.metaKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -629,6 +633,11 @@
           </div>
         {/if}
       </div>
+      {#if diffOpen}
+        <button class="iconbtn" data-tip="Закрыть изменения · Esc" aria-label="Закрыть изменения" onclick={() => (diffOpen = false)}>
+          <svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+      {/if}
     </div>
   <main>
     {#if creating}
@@ -800,9 +809,8 @@
             {/each}
           {/if}
         </div>
-        <button class="iconbtn" data-tip="Закрыть · ⌘D" aria-label="Закрыть дифф" onclick={() => (diffOpen = false)}>✕</button>
       </div>
-      <DiffView groups={diffGroups} onsend={sendReview} />
+      <DiffView groups={diffGroups} onsend={sendReview} onselchange={(b) => (diffSelecting = b)} />
     </aside>
   {:else if selected}
     <aside class="ctx">
