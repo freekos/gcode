@@ -33,7 +33,8 @@
 
   type ProjectNode = { project: Project; tasks: Task[] };
   let tree: ProjectNode[] = $state([]);
-  let project: Project | undefined = $state(); // context for ⌘N
+  let projectId: number | undefined = $state(); // context for ⌘N / hub
+  const project = $derived(tree.find((n) => n.project.id === projectId)?.project);
   let selected: Task | undefined = $state();
 
   const PRIORITY: Record<string, number> = { needs_input: 0, review: 1, running: 2, new: 3, done: 4 };
@@ -44,9 +45,6 @@
     return [...ts].sort((a, b) => (PRIORITY[a.status] ?? 9) - (PRIORITY[b.status] ?? 9));
   }
 
-  // ⌘N creation modal with a persistent draft (ui-inventory: drafts never die)
-  let createOpen = $state(false);
-  let prompt = $state("");
   let creating = $state(false);
   let pendingPrompt: string | null = $state(null);
 
@@ -189,7 +187,7 @@
     tree = await Promise.all(
       projects.map(async (p) => ({ project: p, tasks: sortTasks(await tasksList(p.id, showArchived)) })),
     );
-    project = project ?? projects[0];
+    projectId = projectId ?? projects[0]?.id;
     if (selected) {
       const all = tree.flatMap((n) => n.tasks);
       selected = all.find((t) => t.id === selected!.id) ?? selected;
@@ -197,7 +195,7 @@
   }
 
   onMount(() => {
-    prompt = localStorage.getItem("gcode.draft.newtask") ?? "";
+    hubPrompt = localStorage.getItem("gcode.draft.newtask") ?? "";
     try {
       collapsed = JSON.parse(localStorage.getItem("gcode.sidebar.collapsed") ?? "{}");
     } catch {
@@ -227,7 +225,7 @@
     const onkey = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        createOpen = true;
+        goHub();
       }
       if (e.metaKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -248,18 +246,27 @@
     };
   });
 
-  function saveDraft() {
-    localStorage.setItem("gcode.draft.newtask", prompt);
+  // central hub composer = the only task-creation flow (⌘N leads here)
+  let hubPrompt = $state("");
+  let hubTa: HTMLTextAreaElement | undefined = $state();
+
+  function goHub(pid?: number) {
+    if (pid !== undefined) projectId = pid;
+    selected = undefined;
+    requestAnimationFrame(() => hubTa?.focus());
   }
 
-  // central hub composer (ZCode-style empty state): create a task right here
-  let hubPrompt = $state("");
+  function saveHubDraft() {
+    localStorage.setItem("gcode.draft.newtask", hubPrompt);
+  }
+
   async function submitHub() {
     if (!project || !hubPrompt.trim()) return;
     creating = true;
     pendingPrompt = hubPrompt.trim();
     await taskCreate(project.id, hubPrompt.trim());
     hubPrompt = "";
+    localStorage.removeItem("gcode.draft.newtask");
   }
   function greet(): string {
     const h = new Date().getHours();
@@ -269,16 +276,6 @@
     return "Добрый вечер";
   }
 
-  async function submitCreate() {
-    if (!project || !prompt.trim()) return;
-    creating = true;
-    pendingPrompt = prompt.trim();
-    await taskCreate(project.id, prompt.trim());
-    prompt = "";
-    localStorage.removeItem("gcode.draft.newtask");
-    createOpen = false;
-  }
-
   function hotkeyOf(t: Task): string | undefined {
     const i = ordered.findIndex((x) => x.id === t.id);
     return i >= 0 && i < 9 ? `⌘${i + 1}` : undefined;
@@ -286,7 +283,7 @@
 
   function pick(t: Task, p: Project) {
     selected = t;
-    project = p;
+    projectId = p.id;
   }
 
   async function addProject() {
@@ -295,7 +292,8 @@
     if (picked === null && !isDemo) return; // cancelled
     if (picked) {
       try {
-        project = await projectAdd(picked);
+        const p = await projectAdd(picked);
+        projectId = p.id;
         await reload();
         return;
       } catch (e) {
@@ -315,7 +313,7 @@
       const p = await projectAdd(projPath.trim());
       addProjOpen = false;
       projPath = "";
-      project = p;
+      projectId = p.id;
       await reload();
     } catch (e) {
       projErr = String(e);
@@ -362,7 +360,7 @@
       {/if}
     </div>
 
-    <button class="newtask" onclick={() => (createOpen = true)}>
+    <button class="newtask" onclick={() => goHub()}>
       <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 5.2v5.6M5.2 8h5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
       Новая задача
       <span class="hk-static"><Kbd keys="⌘N" /></span>
@@ -429,7 +427,7 @@
               <button class="iconbtn sm" data-tip={collapsed[node.project.id] ? "Развернуть" : "Свернуть"} aria-label="Свернуть или развернуть" onclick={() => toggleProject(node.project.id)}>
                 <svg class="ic" viewBox="0 0 16 16"><path d="M3 4.5h10M5.5 8h7.5M8 11.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
               </button>
-              <button class="iconbtn sm" data-tip="Новая задача" aria-label="Новая задача" onclick={() => { project = node.project; createOpen = true; }}>
+              <button class="iconbtn sm" data-tip="Новая задача" aria-label="Новая задача" onclick={() => goHub(node.project.id)}>
                 <svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
               </button>
             </span>
@@ -550,9 +548,9 @@
           <div class="hub-proj">
             <span class="proj-chip">
               <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
-              <select bind:value={project} class="proj-pick">
+              <select bind:value={projectId} class="proj-pick">
                 {#each tree as n (n.project.id)}
-                  <option value={n.project}>{n.project.name}</option>
+                  <option value={n.project.id}>{n.project.name}</option>
                 {/each}
               </select>
               <span class="chev2">⌄</span>
@@ -560,7 +558,9 @@
           </div>
           <div class="c-inner">
             <textarea
+              bind:this={hubTa}
               bind:value={hubPrompt}
+              oninput={saveHubDraft}
               rows="2"
               placeholder="Что сделать? Опиши задачу — имя, ветка и worktrees появятся сами"
               onkeydown={(e) => {
@@ -651,7 +651,7 @@
   />
   <div class="pal-list">
     {#each [
-      { label: "Новая задача", key: "cmd-new", hint: "⌘N", act: () => { paletteOpen = false; createOpen = true; } },
+      { label: "Новая задача", key: "cmd-new", hint: "⌘N", act: () => { paletteOpen = false; goHub(); } },
       { label: "Добавить проект", key: "cmd-addproj", hint: "", act: () => { paletteOpen = false; addProject(); } },
       { label: "Styleguide", key: "cmd-styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
       ...ordered.map((t) => ({ label: t.title, key: `task-${t.id}`, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
@@ -661,28 +661,6 @@
         {#if c.hint}<Kbd keys={c.hint} />{/if}
       </button>
     {/each}
-  </div>
-</Modal>
-
-<Modal bind:open={createOpen} width="560px">
-  <h3>Новая задача{project ? ` · ${project.name}` : ""}</h3>
-  <p class="mut" style="margin:0 0 12px">Опиши, что сделать — имя придумается само. Worktrees: все репо проекта.</p>
-  <div class="modal-body">
-  <textarea
-    bind:value={prompt}
-    oninput={saveDraft}
-    placeholder="Например: почини редирект после логина, ломается на вебвью"
-    rows="3"
-    onkeydown={(e) => {
-      if (e.metaKey && e.key === "Enter") submitCreate();
-    }}
-  ></textarea>
-  </div>
-  <div class="modal-bar">
-    <span class="mut" style="font-size:11.5px">черновик сохраняется · ⌘⏎ — создать</span>
-    <span style="flex:1"></span>
-    <Button variant="ghost" onclick={() => (createOpen = false)}>Закрыть</Button>
-    <Button variant="primary" onclick={submitCreate}>Создать</Button>
   </div>
 </Modal>
 
@@ -943,7 +921,6 @@
     cursor: pointer;
     padding-right: 2px;
   }
-  .proj-pick:focus-visible { outline: none; }
   .proj-chip:focus-within { border-color: var(--accent); }
   .chev2 { font-size: 10px; color: var(--text-muted); margin-top: -2px; }
   .hub-box textarea,
@@ -973,7 +950,6 @@
   }
   .send:hover { background: oklch(38% 0.006 280); }
   .send:active { transform: translateY(1px); }
-  .send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .perr { color: var(--diff-del); font-size: 12px; margin: 6px 0 0; }
   aside {
     position: relative;
@@ -1072,17 +1048,6 @@
   .mut { color: var(--text-muted); font-size: 12px; }
   .spin { font-size: 20px; animation: gc-spin 1s linear infinite; }
   @keyframes gc-spin { to { transform: rotate(360deg); } }
-  .modal-body textarea {
-    width: 100%;
-    font: 13px var(--font-ui);
-    color: var(--text-primary);
-    background: var(--surface-1);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--r-md);
-    padding: 10px 12px;
-    resize: vertical;
-  }
-  .modal-body textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .modal-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .thread-box { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; }
   .m-user {

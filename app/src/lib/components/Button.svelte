@@ -33,7 +33,6 @@
   }
   .btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
   .btn:active { transform: translateY(1px); }
-  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .primary { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 600; }
   .primary:hover { filter: brightness(1.08); background: var(--accent); }
   .ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }

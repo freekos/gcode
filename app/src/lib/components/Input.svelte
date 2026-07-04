@@ -24,5 +24,5 @@
     transition: border-color var(--t-fast) ease-out, box-shadow var(--t-fast) ease-out;
   }
   input::placeholder { color: var(--text-muted); }
-  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: none; }
 </style>

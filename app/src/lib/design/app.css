@@ -56,6 +56,16 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Focus policy: keyboard-only, neutral glass ring (blue rings read as web-page).
+   Text fields keep their own quiet border highlight. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 1.5px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
 /* ZCode-style tooltip: ONE fixed element managed in +layout (data-tip sources).
    Fixed positioning + viewport clamping — never clipped by panel overflow. */
 #gc-tip {

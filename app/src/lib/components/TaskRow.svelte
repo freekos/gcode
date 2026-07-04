@@ -43,7 +43,6 @@
     transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
   }
   .row:hover { background: var(--surface-2); color: var(--text-primary); }
-  .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .active { background: var(--accent-soft); color: var(--text-primary); }
   .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hk { opacity: 0; transition: opacity var(--t-fast) ease-out; }
