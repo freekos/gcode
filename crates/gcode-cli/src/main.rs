@@ -344,8 +344,12 @@ fn run_and_stream(
                 let _ = write!(out, "{t}");
                 let _ = out.flush();
             }
-            AgentEvent::ToolUse(n) => {
-                let _ = writeln!(out, "\n[tool: {n}]");
+            AgentEvent::ToolUse(n, detail) => {
+                let _ = if detail.is_empty() {
+                    writeln!(out, "\n[{n}]")
+                } else {
+                    writeln!(out, "\n[{n} · {detail}]")
+                };
             }
             _ => {}
         },
