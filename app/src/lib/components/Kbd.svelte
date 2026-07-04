@@ -1,18 +1,19 @@
 <script lang="ts">
+  // ZCode-style: a hotkey is quiet text, not a boxed key (the boxed look read "wooden").
   let { keys }: { keys: string } = $props();
+  // thin space between the modifier and the key: "⌘N" -> "⌘ N"
+  const pretty = $derived(keys.replace(/([⌘⌥⇧⌃])(?=\S)/g, "$1\u2009"));
 </script>
 
-<kbd>{keys}</kbd>
+<kbd>{pretty}</kbd>
 
 <style>
   kbd {
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 11px;
-    color: var(--text-secondary);
-    background: var(--surface-2);
-    border: 1px solid var(--border-strong);
-    border-bottom-width: 2px;
-    border-radius: var(--r-sm);
-    padding: 1px 6px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    white-space: nowrap;
   }
 </style>
