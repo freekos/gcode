@@ -28,9 +28,14 @@
 {@render children()}
 
 <style>
+  /* drag zone: only the TOP strip of the window (mac convention), a bit tall
+     so it's easy to grab — the 8px rim plus a slice of the top edge */
   .win-frame {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
     z-index: 0;
   }
   .fatal {

@@ -701,7 +701,7 @@
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
   .mono-input { font-family: var(--font-mono); font-size: 12.5px; }
-  .drag-strip { height: 26px; flex: none; margin: -12px -12px 0; }
+  .drag-strip { height: 34px; flex: none; margin: -12px -12px 0; }
   .sb-bottom {
     margin-top: auto;
     display: flex;
