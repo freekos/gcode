@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import TaskCard from "$lib/components/TaskCard.svelte";
+  import TaskRow from "$lib/components/TaskRow.svelte";
   import Button from "$lib/components/Button.svelte";
   import Badge from "$lib/components/Badge.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
@@ -44,6 +44,12 @@
   let ctx: TaskContext | undefined = $state();
   let limit: { kind: string; resetsAt: number } | undefined = $state();
   let paletteOpen = $state(false);
+  let collapsed: Record<number, boolean> = $state({});
+
+  function toggleProject(id: number) {
+    collapsed[id] = !collapsed[id];
+    localStorage.setItem("gcode.sidebar.collapsed", JSON.stringify(collapsed));
+  }
   let palQ = $state("");
   let msg = $state("");
   let threadBox: HTMLElement | undefined = $state();
@@ -130,6 +136,11 @@
 
   onMount(() => {
     prompt = localStorage.getItem("gcode.draft.newtask") ?? "";
+    try {
+      collapsed = JSON.parse(localStorage.getItem("gcode.sidebar.collapsed") ?? "{}");
+    } catch {
+      collapsed = {};
+    }
     reload();
     let un: (() => void) | undefined;
     let unThread: (() => void) | undefined;
@@ -196,6 +207,11 @@
       {#if isDemo}<span class="demo">demo</span>{/if}
     </div>
 
+    <button class="newtask" onclick={() => (createOpen = true)}>
+      <span class="plus">＋</span> Новая задача
+      <span class="hk-static"><Kbd keys="⌘N" /></span>
+    </button>
+
     {#if tree.length === 0}
       <div class="empty-side">
         <p>Проектов пока нет.</p>
@@ -203,25 +219,26 @@
       </div>
     {:else}
       {#each tree as node (node.project.id)}
-        <div class="pnode" class:pactive={project?.id === node.project.id}>
-          <button class="phead" onclick={() => (project = node.project)}>
-            <span class="pname2">{node.project.name}</span>
-            <span class="pmeta">{node.project.repos} репо</span>
+        <div class="pnode">
+          <button class="phead" onclick={() => toggleProject(node.project.id)}>
+            <span class="chev" class:closed={collapsed[node.project.id]}>▾</span>
+            <span class="pname2" class:pactive={project?.id === node.project.id}>{node.project.name}</span>
+            <span class="pmeta">{node.tasks.length}</span>
           </button>
-          {#if node.tasks.length === 0}
-            <p class="mut" style="margin:2px 8px 8px">нет задач · <Kbd keys="⌘N" /></p>
-          {:else}
-            {#each node.tasks as t (t.id)}
-              <TaskCard title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
-            {/each}
+          {#if !collapsed[node.project.id]}
+            <div class="plist">
+              {#if node.tasks.length === 0}
+                <p class="mut" style="margin:2px 8px 6px">нет задач</p>
+              {:else}
+                {#each node.tasks as t (t.id)}
+                  <TaskRow title={t.title} status={t.status} hotkey={hotkeyOf(t)} active={selected?.id === t.id} onclick={() => pick(t, node.project)} />
+                {/each}
+              {/if}
+            </div>
           {/if}
         </div>
       {/each}
     {/if}
-
-    <div class="side-bottom">
-      <Button variant="primary" onclick={() => (createOpen = true)}>+ Задача</Button>
-    </div>
   </aside>
 
   <main>
@@ -387,19 +404,35 @@
     border-radius: 999px;
     padding: 0 7px;
   }
-  .pnode { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .newtask {
+    display: flex; align-items: center; gap: 8px;
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--text-secondary); font: 500 12.5px var(--font-ui);
+    padding: 6px 8px; border-radius: var(--r-md); text-align: left;
+    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
+    margin-bottom: 6px;
+  }
+  .newtask:hover { background: var(--surface-2); color: var(--text-primary); }
+  .newtask .plus { color: var(--accent); font-weight: 700; }
+  .hk-static { margin-left: auto; }
+  .pnode { display: flex; flex-direction: column; margin-bottom: 4px; }
   .phead {
-    display: flex; align-items: baseline; gap: 8px;
+    display: flex; align-items: center; gap: 6px;
     background: transparent; border: 0; cursor: pointer; text-align: left;
-    padding: 4px 6px; border-radius: var(--r-sm);
-    color: var(--text-primary);
+    padding: 5px 6px; border-radius: var(--r-sm);
+    color: var(--text-primary); width: 100%;
   }
   .phead:hover { background: var(--surface-2); }
-  .pname2 { font-weight: 700; font-size: 12.5px; }
-  .pmeta { font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); }
-  .pactive .pname2 { color: var(--accent); }
+  .chev {
+    font-size: 9px; color: var(--text-muted); width: 12px;
+    transition: transform var(--t-fast) ease-out;
+  }
+  .chev.closed { transform: rotate(-90deg); }
+  .pname2 { font-weight: 600; font-size: 12px; letter-spacing: .01em; }
+  .pname2.pactive { color: var(--accent); }
+  .pmeta { margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); }
+  .plist { display: flex; flex-direction: column; gap: 1px; padding-left: 10px; margin-top: 2px; }
   .empty-side { color: var(--text-muted); text-align: center; margin-top: 40px; }
-  .side-bottom { margin-top: auto; padding-top: 12px; }
   main { display: flex; flex-direction: column; overflow: hidden; }
   .thread-head {
     display: flex;
