@@ -114,6 +114,7 @@
   let sortBy: "status" | "created" = $state("status");
   let viewMenuOpen = $state(false);
   let threadMenuOpen = $state(false);
+  let threadMenuPos = $state({ x: 0, y: 0 });
   let upd: UpdateInfo | undefined = $state();
   let updOpen = $state(false);
   let helpOpen = $state(false);
@@ -1073,22 +1074,18 @@
           {/each}
           <button class="tab-plus" data-tip="Новый тред" aria-label="Новый тред" onclick={newThread}>+</button>
           {#if (taskThreads[selected?.id ?? -1]?.length ?? 0) > 0}
-            <div class="thmenu-wrap">
-              <button class="tab-plus" data-tip="История тредов" aria-label="История тредов" onclick={() => (threadMenuOpen = !threadMenuOpen)}>
-                <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.8V8l2.2 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
-              </button>
-              {#if threadMenuOpen && selected}
-                <div class="viewmenu glass-rim thmenu" role="menu">
-                  <div class="vm-sec">Треды задачи</div>
-                  {#each taskThreads[selected.id] ?? [] as ti (ti.id)}
-                    <button class="vm-item" onclick={() => { threadMenuOpen = false; openThreadTab(ti); }}>
-                      <span class="th-title">{ti.title}</span>
-                      <span class="mut" style="margin-left:auto">{ago(ti.created_at)}</span>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
+            <button
+              class="tab-plus"
+              data-tip="История тредов"
+              aria-label="История тредов"
+              onclick={(e) => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                threadMenuPos = { x: r.left, y: r.bottom + 6 };
+                threadMenuOpen = !threadMenuOpen;
+              }}
+            >
+              <svg class="ic" style="width:13px;height:13px" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.8V8l2.2 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
+            </button>
           {/if}
           <span class="tab-hint">⌘⇧[ ] · ⌘W</span>
         </div>
@@ -1411,6 +1408,19 @@
   </div>
 </Modal>
 
+{#if threadMenuOpen && selected}
+  <button class="thmenu-overlay" aria-label="Закрыть" onclick={() => (threadMenuOpen = false)}></button>
+  <div class="viewmenu glass-rim thmenu-fixed" role="menu" style="left:{threadMenuPos.x}px; top:{threadMenuPos.y}px">
+    <div class="vm-sec">Треды задачи</div>
+    {#each taskThreads[selected.id] ?? [] as ti (ti.id)}
+      <button class="vm-item" onclick={() => { threadMenuOpen = false; openThreadTab(ti); }}>
+        <span class="th-title">{ti.title}</span>
+        <span class="mut" style="margin-left:auto">{ago(ti.created_at)}</span>
+      </button>
+    {/each}
+  </div>
+{/if}
+
 <Modal bind:open={filePaletteOpen} width="520px">
   <!-- svelte-ignore a11y_autofocus -->
   <input
@@ -1630,18 +1640,30 @@
   .tab-x:hover { color: var(--text-primary); }
   .tab-x-spacer { width: 9px; }
   .tab-plus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     border: 0;
     background: transparent;
     color: var(--text-muted);
     font-size: 15px;
     cursor: pointer;
-    padding: 2px 8px;
-    border-radius: 6px;
+    padding: 0;
+    border-radius: 8px;
     flex: none;
   }
   .tab-plus:hover { background: var(--surface-2); color: var(--text-primary); }
-  .thmenu-wrap { position: relative; }
-  .thmenu { top: 30px; left: 0; min-width: 260px; }
+  .thmenu-fixed { position: fixed; min-width: 260px; z-index: 900; }
+  .thmenu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 899;
+    background: transparent;
+    border: 0;
+    cursor: default;
+  }
   .th-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
   .tab-hint { margin-left: auto; font-size: 10px; color: var(--text-disabled); flex: none; padding-right: 2px; }
   .md-page { flex: 1; overflow-y: auto; padding: 20px 26px 40px; }
