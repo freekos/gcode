@@ -113,6 +113,7 @@
   let showArchived = $state(false);
   let sortBy: "status" | "created" = $state("status");
   let viewMenuOpen = $state(false);
+  let threadMenuOpen = $state(false);
   let upd: UpdateInfo | undefined = $state();
   let updOpen = $state(false);
   let helpOpen = $state(false);
@@ -1071,6 +1072,24 @@
             </div>
           {/each}
           <button class="tab-plus" data-tip="Новый тред" aria-label="Новый тред" onclick={newThread}>+</button>
+          {#if (taskThreads[selected?.id ?? -1]?.length ?? 0) > 0}
+            <div class="thmenu-wrap">
+              <button class="tab-plus" data-tip="История тредов" aria-label="История тредов" onclick={() => (threadMenuOpen = !threadMenuOpen)}>
+                <svg class="ic" style="width:12px;height:12px" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.8V8l2.2 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
+              </button>
+              {#if threadMenuOpen && selected}
+                <div class="viewmenu glass-rim thmenu" role="menu">
+                  <div class="vm-sec">Треды задачи</div>
+                  {#each taskThreads[selected.id] ?? [] as ti (ti.id)}
+                    <button class="vm-item" onclick={() => { threadMenuOpen = false; openThreadTab(ti); }}>
+                      <span class="th-title">{ti.title}</span>
+                      <span class="mut" style="margin-left:auto">{ago(ti.created_at)}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
           <span class="tab-hint">⌘⇧[ ] · ⌘W</span>
         </div>
       {/if}
@@ -1334,13 +1353,6 @@
         </button>
       {:else}
         <button class="nav-link" onclick={openProgressTab}><span class="mut">PROGRESS.md · открыть →</span></button>
-      {/if}
-
-      {#if selected && (taskThreads[selected.id]?.length ?? 0) > 1}
-        <div class="grp">Треды</div>
-        {#each taskThreads[selected.id] as ti (ti.id)}
-          <button class="nav-link" onclick={() => openThreadTab(ti)}>💬 {ti.title}<span class="mut">{ago(ti.created_at)}</span></button>
-        {/each}
       {/if}
 
       <div class="grp">Изменения</div>
@@ -1628,6 +1640,9 @@
     flex: none;
   }
   .tab-plus:hover { background: var(--surface-2); color: var(--text-primary); }
+  .thmenu-wrap { position: relative; }
+  .thmenu { top: 30px; left: 0; min-width: 260px; }
+  .th-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
   .tab-hint { margin-left: auto; font-size: 10px; color: var(--text-disabled); flex: none; padding-right: 2px; }
   .md-page { flex: 1; overflow-y: auto; padding: 20px 26px 40px; }
   .md-page > :global(.md) { max-width: 860px; margin: 0 auto; }
