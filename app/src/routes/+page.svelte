@@ -986,7 +986,7 @@
     <div class="sb-resize" role="separator" aria-orientation="vertical" aria-label="Ширина сайдбара" onpointerdown={startResize}></div>
   </aside>
 
-  <div class="card glass-rim">
+  <div class="card">
     <div class="card-actions">
       <button class="iconbtn" data-tip={selected ? "Открыть задачу в Finder" : "Открыть проект в Finder"} aria-label="Открыть в Finder" onclick={revealCurrent}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.6h5.2c.8 0 1.4.6 1.4 1.4v6c0 .8-.6 1.4-1.4 1.4H3.2c-.8 0-1.4-.6-1.4-1.4z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
@@ -1414,7 +1414,7 @@
     height: 100%;
   }
   .with-ctx .card { grid-template-columns: 1fr var(--ctxw, 230px); }
-  .card { position: relative; }
+  .card { position: relative; border: 1px solid var(--border-strong); border-radius: 16px; overflow: hidden; }
   .card-actions {
     position: absolute;
     top: 10px;
@@ -1429,12 +1429,10 @@
     margin: 10px 14px 14px 0;
     height: calc(100vh - 24px);
     background: var(--surface-0);
-    border: 0;
+    /* flat even border — no gradient rim, no depth "shadow" (Gaziz's call) */
+    border: 1px solid var(--border-strong);
     border-radius: 16px;
     overflow: hidden;
-    box-shadow:
-      inset 0 1px 0 var(--glass-highlight),
-      0 12px 40px oklch(0% 0 0 / 0.35);
   }
   .sb-head {
     display: flex;
@@ -1566,8 +1564,8 @@
   .m-user-wrap { display: flex; align-items: flex-start; justify-content: flex-end; gap: 6px; }
   .m-user-wrap .m-user { margin-right: 0 !important; }
   .m-agent-wrap { display: flex; align-items: flex-start; gap: 6px; }
-  .msg-acts { display: none; gap: 2px; flex: none; padding-top: 6px; }
-  .m-user-wrap:hover .msg-acts, .m-agent-wrap:hover .msg-acts { display: inline-flex; }
+  .msg-acts { display: inline-flex; gap: 2px; flex: none; padding-top: 6px; visibility: hidden; }
+  .m-user-wrap:hover .msg-acts, .m-agent-wrap:hover .msg-acts { visibility: visible; }
   .msg-acts.left { order: 2; }
   .ma {
     display: inline-flex; align-items: center; justify-content: center;
