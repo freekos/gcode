@@ -27,6 +27,8 @@
     projectFileWrite,
     projectDirList,
     taskDirList,
+    progressRead,
+    type DirEntry,
     projectAdd,
     pickFolder,
     revealProject,
@@ -187,6 +189,108 @@
 
   // cmd-L attachments: chips above the composer (Cursor-style), payload on send
   let attachments: { loc: string; code: string }[] = $state([]);
+  // per-task history of attached quotes (navigator section -> jump to message)
+  let attLog: Record<number, { loc: string; midx: number }[]> = $state({});
+  // project knowledge files for the navigator (root .md + docs/plan/*)
+  let knowledgeFiles: string[] = $state([]);
+
+  async function loadKnowledge() {
+    if (!project) { knowledgeFiles = []; return; }
+    try {
+      const root = await projectDirList(project.id, "");
+      const mds = root.filter((e: DirEntry) => !e.is_dir && e.name.toLowerCase().endsWith(".md")).map((e: DirEntry) => e.name);
+      let plans: string[] = [];
+      if (root.some((e: DirEntry) => e.is_dir && e.name === "docs")) {
+        try {
+          const docs = await projectDirList(project.id, "docs/plan");
+          plans = docs.filter((e: DirEntry) => !e.is_dir && e.name.endsWith(".md")).map((e: DirEntry) => `docs/plan/${e.name}`);
+        } catch { /* no docs/plan */ }
+      }
+      knowledgeFiles = [...mds, ...plans];
+    } catch {
+      knowledgeFiles = [];
+    }
+  }
+
+  async function openProgressTab() {
+    if (!selected) return;
+    const id = "md:progress";
+    try {
+      tabContent[id] = await progressRead(selected.id);
+    } catch {
+      tabContent[id] = "PROGRESS.md пока пуст.";
+    }
+    openTab(selected.id, { id, kind: "md", scope: "task", repo: "", path: "PROGRESS.md", title: "PROGRESS.md" });
+  }
+
+  async function openMdTab(scope: "task" | "project", repo: string, path: string) {
+    if (!selected) return;
+    const id = `md:${scope}:${repo}/${path}`;
+    try {
+      tabContent[id] =
+        scope === "task" ? await fileRead(selected.id, repo, path) : await projectFileRead(project?.id ?? 0, path);
+    } catch {
+      tabContent[id] = "";
+    }
+    openTab(selected.id, { id, kind: "md", scope, repo, path, title: path.split("/").pop() ?? path });
+  }
+
+  async function openKnowledgeTab(rel: string) {
+    if (!selected || !project) return;
+    const id = `md:project:${rel}`;
+    try {
+      tabContent[id] = await projectFileRead(project.id, rel);
+    } catch {
+      tabContent[id] = "";
+    }
+    openTab(selected.id, { id, kind: "md", scope: "project", repo: "", path: rel, title: rel.split("/").pop() ?? rel });
+  }
+
+  const FILE_RE = /^[\w.@-]+(\/[\w.@-]+)+\.[a-z0-9]+$/i;
+
+  async function tryOpenPath(raw: string) {
+    if (!selected) return;
+    const text = raw.replace(/:[\d–-]+$/, "").trim();
+    if (!FILE_RE.test(text)) return;
+    const isMd = text.toLowerCase().endsWith(".md");
+    const repos = ctx?.touched.map((r) => r.repo) ?? [];
+    const [first, ...rest] = text.split("/");
+    const tryOpen = async (repo: string, path: string) => {
+      try {
+        await fileRead(selected!.id, repo, path);
+        if (isMd) await openMdTab("task", repo, path);
+        else await openEditor(repo, path);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (repos.includes(first) && (await tryOpen(first, rest.join("/")))) return;
+    for (const r of repos) if (await tryOpen(r, text)) return;
+    // project-level fallback
+    try {
+      if (!project) return;
+      await projectFileRead(project.id, text);
+      if (isMd) await openKnowledgeTab(text);
+      else await openProjectFile(text);
+    } catch { /* not found anywhere — ignore */ }
+  }
+
+  function onThreadClick(e: MouseEvent) {
+    const code = (e.target as HTMLElement).closest("code");
+    if (code?.textContent) tryOpenPath(code.textContent);
+  }
+
+  function jumpToMessage(midx: number) {
+    if (!selected) return;
+    activeByTask[selected.id] = "thread";
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-midx="${midx}"]`);
+      el?.scrollIntoView({ block: "center" });
+      el?.classList.add("flash");
+      setTimeout(() => el?.classList.remove("flash"), 1200);
+    });
+  }
 
   function quoteReply(text: string) {
     const q = text.split("\n").slice(0, 6).map((l) => `> ${l}`).join("\n");
@@ -315,7 +419,10 @@
   }
   const EMPTY: ThreadState = { items: [], running: false, queue: [] };
   $effect(() => {
-    if (selected) loadCtx();
+    if (selected) {
+      loadCtx();
+      loadKnowledge();
+    }
   });
 
   function fmtReset(ts: number): string {
@@ -324,7 +431,7 @@
   }
   const cur = $derived(selected ? (threads[selected.id] ?? EMPTY) : EMPTY);
 
-  type Block = { kind: "msg"; item: ThreadItem } | { kind: "tools"; tools: string[] };
+  type Block = { kind: "msg"; item: ThreadItem; idx: number } | { kind: "tools"; tools: string[] };
 
   // consecutive tool events fold into one collapsible block (review: tool spam)
   const blocks = $derived.by(() => {
@@ -335,7 +442,7 @@
         if (last?.kind === "tools") last.tools.push(it.text);
         else out.push({ kind: "tools", tools: [it.text] });
       } else {
-        out.push({ kind: "msg", item: it });
+        out.push({ kind: "msg", item: it, idx: cur.items.indexOf(it) });
       }
     }
     return out;
@@ -372,6 +479,9 @@
     if (t.running) {
       t.queue.push(full);
     } else {
+      const midx = t.items.length;
+      if (!attLog[selected.id]) attLog[selected.id] = [];
+      for (const a of attachments) attLog[selected.id].push({ loc: a.loc, midx });
       t.items.push({
         kind: "uquote",
         text: JSON.stringify({ text, atts: attachments.map((a) => a.loc) }),
@@ -861,7 +971,8 @@
         </div>
       {/if}
       {#if !activeTab || activeTab.kind === "thread"}
-      <div class="thread-box" bind:this={threadBox}>
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+      <div class="thread-box" bind:this={threadBox} onclick={onThreadClick} role="presentation">
         {#if cur.items.length === 0}
           <div class="center-empty">
             <p class="mut">Скажи агенту, что делать — worktrees уже готовы:</p>
@@ -923,7 +1034,7 @@
               </div>
             {:else if b.item.kind === "uquote"}
               {@const uq = JSON.parse(b.item.text)}
-              <div class="m-user-wrap">
+              <div class="m-user-wrap" data-midx={b.idx}>
                 <div class="m-user">
                   {#if uq.text}{uq.text}{/if}
                   <div class="uq-atts">
@@ -1089,11 +1200,20 @@
   {#if selected}
     <aside class="ctx">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
-      <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
+      <div class="grp" style="margin-top:2px">Цель</div>
+      {#if ctx && ctx.progress.length}
+        {@const done = ctx.progress.filter((p) => p.done).length}
+        <button class="nav-link" onclick={openProgressTab}>
+          {ctx.progress.find((p) => !p.done)?.text ?? "всё отмечено"}
+          <span class="mut">{done}/{ctx.progress.length} · открыть →</span>
+        </button>
+      {:else}
+        <button class="nav-link" onclick={openProgressTab}><span class="mut">PROGRESS.md · открыть →</span></button>
+      {/if}
+
+      <div class="grp">Изменения</div>
       {#if ctx && ctx.touched.length > 0}
         <button class="all-diff" onclick={() => openDiff(null)}>Все изменения задачи →</button>
-      {/if}
-      {#if ctx && ctx.touched.length}
         {#each ctx.touched as r (r.repo)}
           <button class="repo repo-btn" onclick={() => openDiff(r.repo)} data-tip="Открыть дифф" aria-label="Открыть дифф">
             <div class="rn">{r.repo}</div>
@@ -1103,20 +1223,25 @@
             </div>
           </button>
         {/each}
+        {#if ctx.untouched}
+          <p class="mut" style="margin:4px 2px">ещё {ctx.untouched} не тронуты ›</p>
+        {/if}
       {:else}
         <p class="mut" style="margin:4px 2px">пока без изменений</p>
       {/if}
-      {#if ctx && ctx.untouched}
-        <p class="mut" style="margin:4px 2px">ещё {ctx.untouched} не тронуты ›</p>
+
+      {#if knowledgeFiles.length}
+        <div class="grp">Файлы проекта</div>
+        {#each knowledgeFiles as f (f)}
+          <button class="nav-link mono-sm" onclick={() => openKnowledgeTab(f)}>{f}</button>
+        {/each}
       {/if}
 
-      {#if ctx && ctx.progress.length}
-        <div class="grp">Goal · из PROGRESS.md</div>
-        <ul class="goal">
-          {#each ctx.progress as p, i (i)}
-            <li class:done={p.done}>{p.text}</li>
-          {/each}
-        </ul>
+      {#if selected && attLog[selected.id]?.length}
+        <div class="grp">Вложения</div>
+        {#each attLog[selected.id] as a, i (i)}
+          <button class="nav-link mono-sm" data-tip="К сообщению в треде" onclick={() => jumpToMessage(a.midx)}>📄 {a.loc}</button>
+        {/each}
       {/if}
     </aside>
   {/if}
@@ -1375,6 +1500,31 @@
   }
   .repo-chip.on { background: var(--accent-soft); color: var(--text-primary); }
   .repo-btn { width: 100%; border: 0; text-align: left; cursor: pointer; }
+  .thread-box :global(code.md-ic) { cursor: pointer; }
+  .thread-box :global(code.md-ic:hover) { background: var(--accent-soft); color: var(--text-primary); }
+  .nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font: 12.5px var(--font-ui);
+    text-align: left;
+    padding: 5px 8px;
+    border-radius: var(--r-md);
+    cursor: pointer;
+  }
+  .nav-link:hover { background: var(--surface-2); color: var(--text-primary); }
+  .nav-link .mut { font-size: 11px; }
+  .mono-sm { font-family: var(--font-mono); font-size: 11px; }
+  :global(.flash) { animation: gc-flash 1.2s ease-out; }
+  @keyframes gc-flash {
+    0% { background: var(--accent-soft); border-radius: var(--r-md); }
+    100% { background: transparent; }
+  }
   .all-diff {
     width: 100%;
     background: var(--accent-soft);
@@ -1776,9 +1926,6 @@
   .repo { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px; }
   .rn { font-family: var(--font-mono); font-size: 11.5px; }
   .rrow { display: flex; gap: 10px; margin-top: 3px; align-items: center; }
-  .goal { margin: 4px 0 0; padding-left: 18px; }
-  .goal li { color: var(--text-secondary); margin: 3px 0; font-size: 12.5px; }
-  .goal li.done { color: var(--text-muted); text-decoration: line-through; }
   .pal-input {
     width: 100%; font: 14px var(--font-ui); color: var(--text-primary);
     background: var(--surface-2); border: 1px solid var(--border-subtle);

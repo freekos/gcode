@@ -406,4 +406,9 @@ export async function threadStop(taskId: number, force: boolean): Promise<void> 
   return invoke<void>("thread_stop", { taskId, force });
 }
 
+export async function progressRead(taskId: number): Promise<string> {
+  if (!inTauri) return "# Goal\nПочинить редирект после логина.\n\n## Чеклист\n- [x] найти причину редиректа\n- [x] исправить auth.ts\n- [ ] тест на webview-куку\n";
+  return invoke<string>("progress_read", { taskId });
+}
+
 export const isDemo = !inTauri;

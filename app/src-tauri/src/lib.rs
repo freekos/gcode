@@ -411,6 +411,13 @@ fn project_dir_list(
     gcode_core::files::project_list_dir(&app.handle, project_id, &rel).map_err(err_s)
 }
 
+/// PROGRESS.md of the task (goal/checklist file in the task root).
+#[tauri::command]
+fn progress_read(app: TState<'_, App>, task_id: i64) -> Result<String, String> {
+    let root = gcode_core::runner::task_root(&app.handle, task_id).map_err(err_s)?;
+    std::fs::read_to_string(root.join("PROGRESS.md")).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn task_dir_list(
     app: TState<'_, App>,
@@ -518,6 +525,7 @@ pub fn run() {
             files_list,
             project_dir_list,
             task_dir_list,
+            progress_read,
             project_file_read,
             project_file_write,
             logs_export,

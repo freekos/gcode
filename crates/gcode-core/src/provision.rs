@@ -353,6 +353,10 @@ pub fn write_agent_guardrails(root: &Path, title: &str, repos_list: &str) {
          - Do NOT run git (or gh/glab). Commits, branches, merges and PRs are done by the human \
            through gcode — git commands are technically denied to you.\n\
          - Do NOT install dependencies unless the task explicitly requires it.\n\
+         - Long plans, analyses and design docs go into FILES (docs/*.md inside the \
+           relevant repo worktree, or PROGRESS.md) — NOT into the chat. In the chat give \
+           a short summary plus the file path in backticks, e.g. `server/docs/plan.md` — \
+           the human opens it as a tab.\n\
          - When you finish, summarize what you changed per repo.\n"
     );
     let _ = std::fs::write(root.join("CLAUDE.md"), claude_md);
