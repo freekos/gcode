@@ -52,7 +52,7 @@
   import FileTree from "$lib/components/FileTree.svelte";
   import Md from "$lib/components/Md.svelte";
 
-  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped" | "uquote"; text: string };
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped" | "uquote" | "reply"; text: string };
   type ThreadState = {
     items: ThreadItem[];
     running: boolean;
@@ -315,10 +315,14 @@
     });
   }
 
+  let replyTo: string | null = $state(null);
+
   function quoteReply(text: string) {
-    const q = text.split("\n").slice(0, 6).map((l) => `> ${l}`).join("\n");
-    msg = `${q}\n\n${msg}`;
-    document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    replyTo = text;
+    if (selected) activeByTask[selected.id] = "thread";
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus(),
+    );
   }
 
   // cmd-L: attach a code quote as a chip (the prompt field stays clean)
@@ -507,6 +511,25 @@
     if (!selected || (!msg.trim() && attachments.length === 0)) return;
     const t = th(activeThreadKey);
     const text = msg.trim();
+    if (replyTo !== null) {
+      const quote = replyTo.split("\n").slice(0, 8).map((l) => `> ${l}`).join("\n");
+      const full = `${quote}\n\n${text}`;
+      const item: ThreadItem = { kind: "reply", text: JSON.stringify({ quote: replyTo, text }) };
+      replyTo = null;
+      msg = "";
+      if (t.running) {
+        t.queue.push(full);
+      } else {
+        t.items.push(item);
+        t.running = true;
+        t.waiting = true;
+        t.turnStart = Date.now();
+        stopRequested = false;
+        scrollDown();
+        threadSend(selected.id, threadIdOfKey(activeThreadKey), full);
+      }
+      return;
+    }
     if (attachments.length === 0) {
       if (t.running) t.queue.push(text);
       else fire(selected.id, text);
@@ -1111,6 +1134,14 @@
                   </div>
                 </div>
               </div>
+            {:else if b.item.kind === "reply"}
+              {@const rq = JSON.parse(b.item.text)}
+              <div class="m-user-wrap" data-midx={b.idx}>
+                <div class="m-user">
+                  <div class="rq-quote">{rq.quote.split("\n").slice(0, 4).join("\n")}</div>
+                  {rq.text}
+                </div>
+              </div>
             {:else if b.item.kind === "stopped"}
               <div class="m-stop">⏹ Остановлено</div>
             {:else if b.item.kind === "turn"}
@@ -1123,6 +1154,15 @@
       </div>
       <div class="composer">
         <div class="c-inner glass-rim">
+          {#if replyTo !== null}
+            <div class="att-row">
+              <span class="reply-card">
+                <span class="rq-bar"></span>
+                <span class="rq-text">{replyTo.split("\n")[0].slice(0, 90)}</span>
+                <button class="x" aria-label="Убрать цитату" onclick={() => (replyTo = null)}>×</button>
+              </span>
+            </div>
+          {/if}
           {#if attachments.length}
             <div class="att-row">
               {#each attachments as a, i (i)}
@@ -1509,7 +1549,7 @@
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 0 14px 6px;
+    padding: 8px 14px 8px;
     overflow-x: auto;
   }
   .tab {
@@ -1953,6 +1993,29 @@
   }
   .m-stop { color: var(--text-muted); font-size: 12px; }
   .att-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 12px 0; }
+  .reply-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border-radius: var(--r-md);
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    max-width: 100%;
+  }
+  .reply-card .rq-bar { width: 2.5px; align-self: stretch; border-radius: 2px; background: var(--accent); flex: none; }
+  .reply-card .rq-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reply-card .x { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 0; flex: none; }
+  .reply-card .x:hover { color: var(--diff-del); }
+  .rq-quote {
+    border-left: 2.5px solid var(--accent);
+    padding: 2px 0 2px 10px;
+    margin-bottom: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
   .uq-atts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
   .uq-chip {
     display: inline-flex;
