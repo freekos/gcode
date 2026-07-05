@@ -13,6 +13,9 @@
     taskArchive,
     threadSend,
     threadStop,
+    threadsList,
+    threadNew,
+    type ThreadInfo,
     onThreadEvent,
     onTasksChanged,
     onTaskRenamed,
@@ -80,8 +83,10 @@
   // tasks whose AI name is still cooking -> skeleton shimmer on the title
   let naming = $state(new Set<number>());
 
-  // per-task thread view state (history persistence comes later — engine owns transcripts)
-  let threads: Record<number, ThreadState> = $state({});
+  // thread view state, keyed by thread key: "t<threadId>" | "new:<taskId>"
+  let threads: Record<string, ThreadState> = $state({});
+  // threads of each task (for tabs + navigator)
+  let taskThreads: Record<number, ThreadInfo[]> = $state({});
   let ctx: TaskContext | undefined = $state();
   let limit: { kind: string; resetsAt: number } | undefined = $state();
   let paletteOpen = $state(false);
@@ -150,6 +155,24 @@
     if (i >= 0) tabs.splice(i, 1);
     if (activeByTask[taskId] === id) activeByTask[taskId] = tabs[Math.max(0, i - 1)]?.id ?? "thread";
   }
+  async function newThread() {
+    if (!selected) return;
+    const info = await threadNew(selected.id, `Тред ${(taskThreads[selected.id]?.length ?? 0) + 1}`);
+    taskThreads[selected.id] = await threadsList(selected.id);
+    openTab(selected.id, { id: `t${info.id}`, kind: "thread", title: info.title });
+  }
+
+  async function openThreadTab(info: ThreadInfo) {
+    if (!selected) return;
+    const key = `t${info.id}`;
+    openTab(selected.id, { id: key, kind: "thread", title: info.title });
+    const st = th(key);
+    if (st.items.length === 0 && !st.running) {
+      const items = await threadHistory(selected.id, info.id);
+      if (st.items.length === 0) st.items = items.map((i) => ({ kind: i.kind, text: i.text }));
+    }
+  }
+
   function cycleTab(dir: 1 | -1) {
     if (!selected) return;
     const sid = selected.id;
@@ -362,7 +385,7 @@
     );
     const msg = `Ревью изменений (${comments.length} комм.):\n\n${parts.join("\n\n")}\n\nПоправь по комментариям.`;
     activeByTask[selected.id] = "thread";
-    const t = th(selected.id);
+    const t = th(activeThreadKey);
     // the human sees a structured card; the agent receives the full markdown
     t.items.push({ kind: "review", text: JSON.stringify(comments) });
     if (t.running) {
@@ -372,7 +395,7 @@
       t.waiting = true;
       t.turnStart = Date.now();
       scrollDown();
-      threadSend(selected.id, msg);
+      threadSend(selected.id, threadIdOfKey(activeThreadKey), msg);
     }
   }
 
@@ -413,9 +436,27 @@
 
   // mutating accessor — handlers only (never call from the template: Svelte
   // forbids state mutation inside template expressions)
-  function th(id: number): ThreadState {
-    if (!threads[id]) threads[id] = { items: [], running: false, queue: [] };
-    return threads[id];
+  function th(key: string): ThreadState {
+    if (!threads[key]) threads[key] = { items: [], running: false, queue: [] };
+    return threads[key];
+  }
+
+  // active thread key for the current tab (thread tabs carry their key)
+  const activeThreadKey = $derived.by(() => {
+    if (!selected) return "";
+    const t = activeTab;
+    if (t && t.kind === "thread") return t.id === "thread" ? defaultThreadKey() : t.id;
+    return defaultThreadKey();
+  });
+  // the main "Тред" tab is pinned to ONE thread (the task's oldest); new
+  // threads from "+" get their own tabs — the main tab never jumps around
+  let mainThread: Record<number, string> = $state({});
+  function defaultThreadKey(): string {
+    if (!selected) return "";
+    return mainThread[selected.id] ?? `new:${selected.id}`;
+  }
+  function threadIdOfKey(key: string): number | null {
+    return key.startsWith("t") ? Number(key.slice(1)) : null;
   }
   const EMPTY: ThreadState = { items: [], running: false, queue: [] };
   $effect(() => {
@@ -429,7 +470,7 @@
     const d = new Date(ts * 1000);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
-  const cur = $derived(selected ? (threads[selected.id] ?? EMPTY) : EMPTY);
+  const cur = $derived(activeThreadKey ? (threads[activeThreadKey] ?? EMPTY) : EMPTY);
 
   type Block = { kind: "msg"; item: ThreadItem; idx: number } | { kind: "tools"; tools: string[] };
 
@@ -464,7 +505,7 @@
 
   function sendMsg() {
     if (!selected || (!msg.trim() && attachments.length === 0)) return;
-    const t = th(selected.id);
+    const t = th(activeThreadKey);
     const text = msg.trim();
     if (attachments.length === 0) {
       if (t.running) t.queue.push(text);
@@ -491,7 +532,17 @@
       t.turnStart = Date.now();
       stopRequested = false;
       scrollDown();
-      threadSend(selected.id, full);
+      const k = activeThreadKey;
+      threadSend(selected.id, threadIdOfKey(k), full).then(async (tid) => {
+        if (k.startsWith("new:")) {
+          threads[`t${tid}`] = threads[k];
+          delete threads[k];
+          if (selected) {
+            mainThread[selected.id] = `t${tid}`;
+            taskThreads[selected.id] = await threadsList(selected.id);
+          }
+        }
+      });
     }
     attachments = [];
     msg = "";
@@ -501,19 +552,29 @@
 
   function stopTurn() {
     if (!selected) return;
-    threadStop(selected.id, stopRequested); // 2nd click = force kill
+    const tid = threadIdOfKey(activeThreadKey);
+    if (tid === null) return;
+    threadStop(selected.id, tid, stopRequested); // 2nd click = force kill
     stopRequested = true;
   }
 
-  function fire(taskId: number, prompt: string) {
-    const t = th(taskId);
+  async function fire(taskId: number, prompt: string, key?: string) {
+    const k = key ?? activeThreadKey ?? `new:${taskId}`;
+    const t = th(k);
     t.items.push({ kind: "user", text: prompt });
     t.running = true;
     t.waiting = true; // skeleton "agent is connecting" until the first event
     t.turnStart = Date.now();
     stopRequested = false;
     scrollDown();
-    threadSend(taskId, prompt);
+    const tid = await threadSend(taskId, threadIdOfKey(k), prompt);
+    if (k.startsWith("new:")) {
+      // the backend created the thread — rebind the state to its real id
+      threads[`t${tid}`] = threads[k];
+      delete threads[k];
+      mainThread[taskId] = `t${tid}`;
+      taskThreads[taskId] = await threadsList(taskId);
+    }
   }
 
   async function loadCtx() {
@@ -521,7 +582,7 @@
   }
 
   function onEvent(e: ThreadEvent) {
-    const t = th(e.task_id);
+    const t = th(`t${e.thread_id}`);
     if (e.kind === "limit") {
       if (e.resets_at) limit = { kind: e.text, resetsAt: e.resets_at };
       return;
@@ -549,7 +610,7 @@
       }
       loadCtx();
       const next = t.queue.shift();
-      if (next) fire(e.task_id, next);
+      if (next) fire(e.task_id, next, `t${e.thread_id}`);
     }
     if (selected?.id === e.task_id) scrollDown();
   }
@@ -679,16 +740,23 @@
     selected = t;
     projectId = p.id;
     diffRepo = null;
-    // restore the conversation from the engine transcript on first open
-    const st = th(t.id);
-    if (st.items.length === 0 && !st.running) {
-      threadHistory(t.id).then((items) => {
-        if (st.items.length === 0 && items.length) {
-          st.items = items.map((i) => ({ kind: i.kind, text: i.text }));
-          if (selected?.id === t.id) scrollDown();
-        }
-      });
-    }
+    // load the task's threads, then restore the latest conversation
+    threadsList(t.id).then((list) => {
+      taskThreads[t.id] = list;
+      if (!list.length) return;
+      const oldest = [...list].sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+      if (!mainThread[t.id]) mainThread[t.id] = `t${oldest.id}`;
+      const tid = Number(mainThread[t.id].slice(1));
+      const st = th(mainThread[t.id]);
+      if (st.items.length === 0 && !st.running) {
+        threadHistory(t.id, tid).then((items) => {
+          if (st.items.length === 0 && items.length) {
+            st.items = items.map((i) => ({ kind: i.kind, text: i.text }));
+            if (selected?.id === t.id) scrollDown();
+          }
+        });
+      }
+    });
   }
 
   async function addProject() {
@@ -954,7 +1022,7 @@
         {/if}
         <Badge status={cur.running ? "running" : selected.status} />
       </div>
-      {#if curTabs.length > 1}
+      {#if curTabs.length > 0}
         <div class="tabbar">
           {#each curTabs as t (t.id)}
             <div class="tab" class:on={activeTab?.id === t.id}>
@@ -967,6 +1035,7 @@
               {/if}
             </div>
           {/each}
+          <button class="tab-plus" data-tip="Новый тред" aria-label="Новый тред" onclick={newThread}>+</button>
           <span class="tab-hint">⌘⇧[ ] · ⌘W</span>
         </div>
       {/if}
@@ -1209,6 +1278,13 @@
         </button>
       {:else}
         <button class="nav-link" onclick={openProgressTab}><span class="mut">PROGRESS.md · открыть →</span></button>
+      {/if}
+
+      {#if selected && (taskThreads[selected.id]?.length ?? 0) > 1}
+        <div class="grp">Треды</div>
+        {#each taskThreads[selected.id] as ti (ti.id)}
+          <button class="nav-link" onclick={() => openThreadTab(ti)}>💬 {ti.title}<span class="mut">{ago(ti.created_at)}</span></button>
+        {/each}
       {/if}
 
       <div class="grp">Изменения</div>
@@ -1473,6 +1549,17 @@
     padding: 2px 8px 2px 2px;
   }
   .tab-x:hover { color: var(--text-primary); }
+  .tab-plus {
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 15px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 6px;
+    flex: none;
+  }
+  .tab-plus:hover { background: var(--surface-2); color: var(--text-primary); }
   .tab-hint { margin-left: auto; font-size: 10px; color: var(--text-disabled); flex: none; padding-right: 2px; }
   .md-page { flex: 1; overflow-y: auto; padding: 20px 26px 40px; }
   .md-page > :global(.md) { max-width: 860px; margin: 0 auto; }

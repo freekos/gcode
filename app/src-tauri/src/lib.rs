@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager, State as TState};
 struct App {
     handle: StateHandle,
     queues: Arc<KeyedQueues>,
-    /// live agent session per task (pattern B: one persistent process, many turns)
+    /// live agent session per THREAD (pattern B: one persistent process, many turns)
     sessions: Arc<Mutex<HashMap<i64, LiveSession>>>,
 }
 
@@ -188,53 +188,65 @@ fn task_create(
 #[derive(Serialize, Clone)]
 struct ThreadEvent {
     task_id: i64,
+    thread_id: i64,
     kind: String, // "delta" | "tool" | "limit" | "done"
     text: String,
     ok: Option<bool>,
     resets_at: Option<i64>,
 }
 
-/// Send a message into the task's LIVE agent session (pattern B). The first
-/// send spawns a persistent claude process (resuming the stored engine session);
-/// later sends reuse it — no cold starts. Events stream as "thread-event".
+/// Send a message into a LIVE agent session of the task (pattern B).
+/// thread_id=None -> latest thread (created if missing). Returns the thread id.
 #[tauri::command]
 fn thread_send(
     app_handle: AppHandle,
     app: TState<'_, App>,
     task_id: i64,
+    thread_id: Option<i64>,
     prompt: String,
-) -> Result<(), String> {
-    // one running agent per task (atomic via the actor)
+) -> Result<i64, String> {
     app.handle
         .call(move |st| st.try_start_agent(task_id))
         .map_err(err_s)?;
 
-    let mut sessions = app.sessions.lock().unwrap();
-    let need_spawn = match sessions.get_mut(&task_id) {
-        Some(s) => !s.alive(),
-        None => true,
-    };
-    if need_spawn {
-        let thread = app
+    let thread = match thread_id {
+        Some(tid) => app
             .handle
             .call(move |st| st.list_threads(task_id))
             .map_err(err_s)?
             .into_iter()
-            .next();
-        let thread = match thread {
-            Some(t) => t,
-            None => app
+            .find(|t| t.id == tid)
+            .ok_or_else(|| format!("thread #{tid} not found"))?,
+        None => {
+            let existing = app
                 .handle
-                .call({
-                    let title: String = prompt.chars().take(48).collect();
-                    move |st| st.add_thread(task_id, "claude", &title)
-                })
-                .map_err(err_s)?,
-        };
+                .call(move |st| st.list_threads(task_id))
+                .map_err(err_s)?
+                .into_iter()
+                .next();
+            match existing {
+                Some(t) => t,
+                None => app
+                    .handle
+                    .call({
+                        let title: String = prompt.chars().take(48).collect();
+                        move |st| st.add_thread(task_id, "claude", &title)
+                    })
+                    .map_err(err_s)?,
+            }
+        }
+    };
+    let tid = thread.id;
+
+    let mut sessions = app.sessions.lock().unwrap();
+    let need_spawn = match sessions.get_mut(&tid) {
+        Some(s) => !s.alive(),
+        None => true,
+    };
+    if need_spawn {
         let root = gcode_core::runner::task_root(&app.handle, task_id).map_err(err_s)?;
         let handle = app.handle.clone();
         let ah = app_handle.clone();
-        let thread_id = thread.id;
         let session = LiveSession::spawn(
             "claude",
             &root,
@@ -244,12 +256,13 @@ fn thread_send(
                     AgentEvent::Session(sid) => {
                         let sid2 = sid.clone();
                         handle.call(move |st| {
-                            let _ = st.set_thread_session(thread_id, &sid2);
+                            let _ = st.set_thread_session(tid, &sid2);
                         });
                         return;
                     }
                     AgentEvent::TextDelta(t) | AgentEvent::WholeText(t) => ThreadEvent {
                         task_id,
+                        thread_id: tid,
                         kind: "delta".into(),
                         text: t.clone(),
                         ok: None,
@@ -257,6 +270,7 @@ fn thread_send(
                     },
                     AgentEvent::ToolUse(n, d) => ThreadEvent {
                         task_id,
+                        thread_id: tid,
                         kind: "tool".into(),
                         text: if d.is_empty() { n.clone() } else { format!("{n} · {d}") },
                         ok: None,
@@ -264,6 +278,7 @@ fn thread_send(
                     },
                     AgentEvent::RateLimit { kind, resets_at } => ThreadEvent {
                         task_id,
+                        thread_id: tid,
                         kind: "limit".into(),
                         text: kind.clone(),
                         ok: None,
@@ -272,11 +287,12 @@ fn thread_send(
                     AgentEvent::Done { ok, error } => {
                         handle.call(move |st| {
                             let _ = st.finish_agent(task_id);
-                            let _ = st.touch_thread(thread_id);
+                            let _ = st.touch_thread(tid);
                         });
                         let _ = ah.emit("tasks-changed", serde_json::json!({ "ok": true }));
                         ThreadEvent {
                             task_id,
+                            thread_id: tid,
                             kind: "done".into(),
                             text: error.clone().unwrap_or_default(),
                             ok: Some(*ok),
@@ -288,36 +304,70 @@ fn thread_send(
             },
         )
         .map_err(err_s)?;
-        sessions.insert(task_id, session);
+        sessions.insert(tid, session);
     }
-    if let Some(sess) = sessions.get_mut(&task_id) {
+    if let Some(sess) = sessions.get_mut(&tid) {
         if let Err(e) = sess.send(&prompt) {
-            sessions.remove(&task_id);
+            sessions.remove(&tid);
             let _ = app.handle.call(move |st| st.finish_agent(task_id));
             return Err(err_s(e));
         }
     }
-    Ok(())
+    Ok(tid)
+}
+
+#[derive(serde::Serialize)]
+struct ThreadDto {
+    id: i64,
+    title: String,
+    created_at: String,
+}
+
+#[tauri::command]
+fn threads_list(app: TState<'_, App>, task_id: i64) -> Result<Vec<ThreadDto>, String> {
+    let threads = app
+        .handle
+        .call(move |st| st.list_threads(task_id))
+        .map_err(err_s)?;
+    Ok(threads
+        .into_iter()
+        .map(|t| ThreadDto { id: t.id, title: t.title, created_at: t.created_at })
+        .collect())
+}
+
+#[tauri::command]
+fn thread_new(app: TState<'_, App>, task_id: i64, title: String) -> Result<ThreadDto, String> {
+    let t = app
+        .handle
+        .call(move |st| st.add_thread(task_id, "claude", &title))
+        .map_err(err_s)?;
+    Ok(ThreadDto { id: t.id, title: t.title, created_at: t.created_at })
 }
 
 /// Stop the running turn: soft = control-protocol interrupt (process lives on);
 /// force = kill the session (it respawns with --resume on the next send).
 #[tauri::command]
-fn thread_stop(app_handle: AppHandle, app: TState<'_, App>, task_id: i64, force: bool) -> Result<(), String> {
+fn thread_stop(
+    app_handle: AppHandle,
+    app: TState<'_, App>,
+    task_id: i64,
+    thread_id: i64,
+    force: bool,
+) -> Result<(), String> {
     let mut sessions = app.sessions.lock().unwrap();
     if force {
-        if let Some(mut s) = sessions.remove(&task_id) {
+        if let Some(mut s) = sessions.remove(&thread_id) {
             s.kill();
         }
         let _ = app.handle.call(move |st| st.finish_agent(task_id));
         let _ = app_handle.emit(
             "thread-event",
-            ThreadEvent { task_id, kind: "done".into(), text: "остановлено".into(), ok: Some(false), resets_at: None },
+            ThreadEvent { task_id, thread_id, kind: "done".into(), text: "остановлено".into(), ok: Some(false), resets_at: None },
         );
         let _ = app_handle.emit("tasks-changed", serde_json::json!({ "ok": true }));
         return Ok(());
     }
-    if let Some(s) = sessions.get_mut(&task_id) {
+    if let Some(s) = sessions.get_mut(&thread_id) {
         s.interrupt().map_err(err_s)?;
     } else {
         let _ = app.handle.call(move |st| st.finish_agent(task_id));
@@ -330,13 +380,16 @@ fn thread_stop(app_handle: AppHandle, app: TState<'_, App>, task_id: i64, force:
 fn thread_history(
     app: TState<'_, App>,
     task_id: i64,
+    thread_id: Option<i64>,
 ) -> Result<Vec<gcode_core::transcript::HistoryItem>, String> {
-    let thread = app
+    let threads = app
         .handle
         .call(move |st| st.list_threads(task_id))
-        .map_err(err_s)?
-        .into_iter()
-        .next();
+        .map_err(err_s)?;
+    let thread = match thread_id {
+        Some(tid) => threads.into_iter().find(|t| t.id == tid),
+        None => threads.into_iter().next(),
+    };
     let Some(thread) = thread else {
         return Ok(vec![]);
     };
@@ -453,8 +506,13 @@ fn task_pin(app: TState<'_, App>, task_id: i64, pinned: bool) -> Result<(), Stri
 /// worktrees removed, branches kept. Kills the live session first.
 #[tauri::command]
 fn task_archive(app_handle: AppHandle, app: TState<'_, App>, task_id: i64) -> Result<(), String> {
-    if let Some(mut s) = app.sessions.lock().unwrap().remove(&task_id) {
-        s.kill();
+    if let Ok(threads) = app.handle.call(move |st| st.list_threads(task_id)) {
+        let mut sessions = app.sessions.lock().unwrap();
+        for t in threads {
+            if let Some(mut s) = sessions.remove(&t.id) {
+                s.kill();
+            }
+        }
     }
     let handle = app.handle.clone();
     let queues = app.queues.clone();
@@ -514,6 +572,8 @@ pub fn run() {
             tasks_list,
             task_create,
             thread_send,
+            threads_list,
+            thread_new,
             thread_stop,
             thread_history,
             task_context,

@@ -133,6 +133,7 @@ export async function onTasksChanged(
 
 export interface ThreadEvent {
   task_id: number;
+  thread_id: number;
   kind: "delta" | "tool" | "limit" | "done";
   text: string;
   ok: boolean | null;
@@ -161,8 +162,28 @@ export async function taskContext(taskId: number): Promise<TaskContext> {
   return invoke<TaskContext>("task_context", { taskId });
 }
 
-export async function threadSend(taskId: number, prompt: string): Promise<void> {
+export interface ThreadInfo { id: number; title: string; created_at: string; }
+
+export async function threadsList(taskId: number): Promise<ThreadInfo[]> {
+  if (!inTauri) return demoThreads[taskId] ?? [];
+  return invoke<ThreadInfo[]>("threads_list", { taskId });
+}
+
+export async function threadNew(taskId: number, title: string): Promise<ThreadInfo> {
   if (!inTauri) {
+    const t = { id: demoId++, title, created_at: new Date().toISOString() };
+    demoThreads[taskId] = [t, ...(demoThreads[taskId] ?? [])];
+    return t;
+  }
+  return invoke<ThreadInfo>("thread_new", { taskId, title });
+}
+
+const demoThreads: Record<number, ThreadInfo[]> = {};
+
+export async function threadSend(taskId: number, threadId: number | null, prompt: string): Promise<number> {
+  if (!inTauri) {
+    let tid = threadId ?? demoThreads[taskId]?.[0]?.id;
+    if (tid === undefined) { tid = demoId++; demoThreads[taskId] = [{ id: tid, title: prompt.slice(0, 30), created_at: new Date().toISOString() }]; }
     // demo: stream a scripted reply
     const chunks = [
       "## План редизайна\n\n",
@@ -172,16 +193,16 @@ export async function threadSend(taskId: number, prompt: string): Promise<void> 
     ];
     const fire = (detail: ThreadEvent, delay: number) =>
       setTimeout(() => window.dispatchEvent(new CustomEvent("demo-thread-event", { detail })), delay);
-    fire({ task_id: taskId, kind: "limit", text: "five_hour", ok: null, resets_at: Math.floor(Date.now() / 1000) + 7200 }, 300);
-    fire({ task_id: taskId, kind: "tool", text: "Read · server/src/auth.ts", ok: null }, 500);
-    fire({ task_id: taskId, kind: "tool", text: "Bash · pnpm test auth", ok: null }, 650);
-    fire({ task_id: taskId, kind: "tool", text: "Read · crm/src/session.ts", ok: null }, 800);
-    chunks.forEach((c, i) => fire({ task_id: taskId, kind: "delta", text: c, ok: null }, 900 + i * 500));
-    fire({ task_id: taskId, kind: "tool", text: "Edit · server/src/auth.ts", ok: null }, 1600);
-    fire({ task_id: taskId, kind: "done", text: "", ok: true }, 900 + chunks.length * 500 + 300);
-    return;
+    fire({ task_id: taskId, thread_id: tid, kind: "limit", text: "five_hour", ok: null, resets_at: Math.floor(Date.now() / 1000) + 7200 }, 300);
+    fire({ task_id: taskId, thread_id: tid, kind: "tool", text: "Read · server/src/auth.ts", ok: null }, 500);
+    fire({ task_id: taskId, thread_id: tid, kind: "tool", text: "Bash · pnpm test auth", ok: null }, 650);
+    fire({ task_id: taskId, thread_id: tid, kind: "tool", text: "Read · crm/src/session.ts", ok: null }, 800);
+    chunks.forEach((c, i) => fire({ task_id: taskId, thread_id: tid, kind: "delta", text: c, ok: null }, 900 + i * 500));
+    fire({ task_id: taskId, thread_id: tid, kind: "tool", text: "Edit · server/src/auth.ts", ok: null }, 1600);
+    fire({ task_id: taskId, thread_id: tid, kind: "done", text: "", ok: true }, 900 + chunks.length * 500 + 300);
+    return tid;
   }
-  return invoke<void>("thread_send", { taskId, prompt });
+  return invoke<number>("thread_send", { taskId, threadId, prompt });
 }
 
 export async function onThreadEvent(cb: (e: ThreadEvent) => void): Promise<() => void> {
@@ -278,9 +299,9 @@ export async function exportLogs(): Promise<string | null> {
 export interface HistoryItem { kind: "user" | "agent" | "tool"; text: string; }
 
 /** History of the task's latest thread (from Claude's own transcript). */
-export async function threadHistory(taskId: number): Promise<HistoryItem[]> {
+export async function threadHistory(taskId: number, threadId: number | null): Promise<HistoryItem[]> {
   if (!inTauri) return [];
-  return invoke<HistoryItem[]>("thread_history", { taskId });
+  return invoke<HistoryItem[]>("thread_history", { taskId, threadId });
 }
 
 export async function taskPin(taskId: number, pinned: boolean): Promise<void> {
@@ -398,12 +419,12 @@ export async function projectFileWrite(projectId: number, rel: string, content: 
   return invoke<void>("project_file_write", { projectId, rel, content });
 }
 
-export async function threadStop(taskId: number, force: boolean): Promise<void> {
+export async function threadStop(taskId: number, threadId: number, force: boolean): Promise<void> {
   if (!inTauri) {
-    window.dispatchEvent(new CustomEvent("demo-thread-event", { detail: { task_id: taskId, kind: "done", text: "остановлено", ok: false } }));
+    window.dispatchEvent(new CustomEvent("demo-thread-event", { detail: { task_id: taskId, thread_id: threadId, kind: "done", text: "остановлено", ok: false } }));
     return;
   }
-  return invoke<void>("thread_stop", { taskId, force });
+  return invoke<void>("thread_stop", { taskId, threadId, force });
 }
 
 export async function progressRead(taskId: number): Promise<string> {
