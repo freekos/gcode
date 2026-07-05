@@ -86,21 +86,17 @@
   let collapsed: Record<number, boolean> = $state({});
   let sbw = $state(260);
   let ctxw = $state(230); // right panel width (resizable)
-  let diffw = $state(560); // right panel width in diff mode
 
   function startCtxResize(e: PointerEvent) {
     e.preventDefault();
     const startX = e.clientX;
-    const wide = diffOpen || editorOpen;
-    const startW = wide ? diffw : ctxw;
+    const startW = ctxw;
     const move = (ev: PointerEvent) => {
       const w = startW + (startX - ev.clientX);
-      if (wide) diffw = Math.min(Math.round(window.innerWidth * 0.6), Math.max(460, w));
-      else ctxw = Math.min(420, Math.max(210, w));
+      ctxw = Math.min(420, Math.max(210, w));
     };
     const up = () => {
       localStorage.setItem("gcode.ctx.width", String(ctxw));
-      localStorage.setItem("gcode.diff.width", String(diffw));
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
@@ -113,15 +109,52 @@
   let upd: UpdateInfo | undefined = $state();
   let updOpen = $state(false);
   let helpOpen = $state(false);
-  let diffOpen = $state(false);
   let diffSelecting = $state(false); // a line range is being commented
-  // editor mode in the wide right panel (opens from diff file header / cmd-P)
-  let editorOpen = $state(false);
-  let editorFrom: "diff" | null = $state(null); // panel to return to on close
-  let editorRepo = $state("");
-  let editorPath = $state("");
-  let editorContent = $state("");
-  let editorScope: "task" | "project" = $state("task");
+
+  // ---- tabbed center (phase 4.5): thread / diff / file / md ----
+  type Tab =
+    | { id: string; kind: "thread"; title: string }
+    | { id: string; kind: "diff"; title: string }
+    | { id: string; kind: "file"; scope: "task" | "project"; repo: string; path: string; title: string }
+    | { id: string; kind: "md"; scope: "task" | "project"; repo: string; path: string; title: string };
+  let tabsByTask: Record<number, Tab[]> = $state({});
+  let activeByTask: Record<number, string> = $state({});
+  // file/md tab contents, keyed by tab id
+  let tabContent: Record<string, string> = $state({});
+
+  function tabsOf(taskId: number): Tab[] {
+    if (!tabsByTask[taskId]) {
+      tabsByTask[taskId] = [{ id: "thread", kind: "thread", title: "Тред" }];
+      activeByTask[taskId] = "thread";
+    }
+    return tabsByTask[taskId];
+  }
+  const curTabs = $derived(selected ? (tabsByTask[selected.id] ?? [{ id: "thread", kind: "thread", title: "Тред" } as Tab]) : []);
+  const activeTab = $derived.by(() => {
+    if (!selected) return undefined;
+    const id = activeByTask[selected.id] ?? "thread";
+    return curTabs.find((t) => t.id === id) ?? curTabs[0];
+  });
+
+  function openTab(taskId: number, tab: Tab) {
+    const tabs = tabsOf(taskId);
+    if (!tabs.some((t) => t.id === tab.id)) tabs.push(tab);
+    activeByTask[taskId] = tab.id;
+  }
+  function closeTab(taskId: number, id: string) {
+    if (id === "thread") return; // the thread tab stays
+    const tabs = tabsOf(taskId);
+    const i = tabs.findIndex((t) => t.id === id);
+    if (i >= 0) tabs.splice(i, 1);
+    if (activeByTask[taskId] === id) activeByTask[taskId] = tabs[Math.max(0, i - 1)]?.id ?? "thread";
+  }
+  function cycleTab(dir: 1 | -1) {
+    if (!selected) return;
+    const sid = selected.id;
+    const tabs = tabsOf(sid);
+    const i = tabs.findIndex((t) => t.id === (activeByTask[sid] ?? "thread"));
+    activeByTask[sid] = tabs[(i + dir + tabs.length) % tabs.length].id;
+  }
   // sidebar "Show files" mode (ZCode-style): the tree shows the WORKING COPY
   let sbMode: "tasks" | "files" = $state("tasks");
   let filesScope: "project" | "task" = $state("project");
@@ -132,34 +165,24 @@
 
   async function openEditor(repo: string, path: string) {
     if (!selected) return;
+    const id = `file:task:${repo}/${path}`;
+    let content = "";
     try {
-      editorContent = await fileRead(selected.id, repo, path);
-    } catch {
-      editorContent = "";
-    }
-    editorScope = "task";
-    editorRepo = repo;
-    editorPath = path;
-    editorFrom = diffOpen ? "diff" : null;
-    diffOpen = false;
-    editorOpen = true;
-    // the sidebar shows the task's worktrees (repos + their branches) meanwhile
-    filesScope = "task";
-    sbMode = "files";
+      content = await fileRead(selected.id, repo, path);
+    } catch { /* new file */ }
+    tabContent[id] = content;
+    openTab(selected.id, { id, kind: "file", scope: "task", repo, path, title: path.split("/").pop() ?? path });
   }
 
   async function openProjectFile(rel: string) {
-    if (!filesProject) return;
+    if (!filesProject || !selected) return;
+    const id = `file:project:${rel}`;
+    let content = "";
     try {
-      editorContent = await projectFileRead(filesProject.id, rel);
-    } catch {
-      editorContent = "";
-    }
-    editorScope = "project";
-    editorRepo = "";
-    editorPath = rel;
-    diffOpen = false;
-    editorOpen = true;
+      content = await projectFileRead(filesProject.id, rel);
+    } catch { /* missing */ }
+    tabContent[id] = content;
+    openTab(selected.id, { id, kind: "file", scope: "project", repo: "", path: rel, title: rel.split("/").pop() ?? rel });
   }
 
   // cmd-L attachments: chips above the composer (Cursor-style), payload on send
@@ -174,23 +197,20 @@
   // cmd-L: attach a code quote as a chip (the prompt field stays clean)
   function quoteToComposer(loc: string, code: string) {
     attachments = [...attachments, { loc, code }];
-    document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    if (selected) activeByTask[selected.id] = "thread";
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus(),
+    );
   }
 
-  function saveEditor(text: string) {
-    if (editorScope === "project") {
-      if (filesProject) projectFileWrite(filesProject.id, editorPath, text);
-      return;
+  function saveEditor(tab: Tab, text: string) {
+    if (tab.kind !== "file" || !selected) return;
+    tabContent[tab.id] = text;
+    if (tab.scope === "project") {
+      if (filesProject) projectFileWrite(filesProject.id, tab.path, text);
+    } else {
+      fileWrite(selected.id, tab.repo, tab.path, text);
     }
-    if (!selected) return;
-    fileWrite(selected.id, editorRepo, editorPath, text);
-  }
-
-  function closeEditor() {
-    editorOpen = false;
-    if (filesScope === "task") sbMode = "tasks";
-    if (editorFrom === "diff") diffOpen = true; // return to the diff it came from
-    editorFrom = null;
   }
 
   async function openFilePalette() {
@@ -221,7 +241,7 @@
   async function openDiff(repo?: string | null) {
     if (!selected) return;
     diffRepo = repo ?? null;
-    diffOpen = true;
+    openTab(selected.id, { id: "diff", kind: "diff", title: "Изменения" });
     const repos = diffRepo ? [diffRepo] : (ctx?.touched.map((r) => r.repo) ?? []);
     const sel = selected;
     diffGroups = await Promise.all(
@@ -237,7 +257,7 @@
         `**${c.repo}/${c.file}:${c.from}${c.to !== c.from ? `–${c.to}` : ""}**\n${fence}\n${c.code}\n${fence}\n${c.text}`,
     );
     const msg = `Ревью изменений (${comments.length} комм.):\n\n${parts.join("\n\n")}\n\nПоправь по комментариям.`;
-    diffOpen = false;
+    activeByTask[selected.id] = "thread";
     const t = th(selected.id);
     // the human sees a structured card; the agent receives the full markdown
     t.items.push({ kind: "review", text: JSON.stringify(comments) });
@@ -447,7 +467,6 @@
     }
     sbw = Number(localStorage.getItem("gcode.sidebar.width") ?? 260) || 260;
     ctxw = Number(localStorage.getItem("gcode.ctx.width") ?? 230) || 230;
-    diffw = Number(localStorage.getItem("gcode.diff.width") ?? 560) || 560;
     checkUpdate().then((u) => (upd = u));
     reload();
     let un: (() => void) | undefined;
@@ -471,14 +490,21 @@
       }
       if (e.metaKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        if (selected) diffOpen ? (diffOpen = false) : openDiff();
+        if (selected) openDiff();
       }
-      if (e.key === "Escape" && diffOpen && !diffSelecting && !paletteOpen && !addProjOpen) {
-        diffOpen = false;
+      if (e.metaKey && e.shiftKey && (e.key === "[" || e.key === "{")) {
+        e.preventDefault();
+        cycleTab(-1);
       }
-      if (e.key === "Escape" && editorOpen && !filePaletteOpen) {
-        closeEditor();
-      } else if (e.key === "Escape" && sbMode === "files" && !paletteOpen && !addProjOpen) {
+      if (e.metaKey && e.shiftKey && (e.key === "]" || e.key === "}")) {
+        e.preventDefault();
+        cycleTab(1);
+      }
+      if (e.metaKey && !e.shiftKey && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        if (selected && activeTab) closeTab(selected.id, activeTab.id);
+      }
+      if (e.key === "Escape" && sbMode === "files" && !paletteOpen && !addProjOpen && !filePaletteOpen) {
         sbMode = "tasks";
       }
       if (e.metaKey && e.key.toLowerCase() === "p") {
@@ -489,11 +515,6 @@
         e.preventDefault();
         palQ = "";
         paletteOpen = true;
-      }
-      if (e.metaKey && /^[1-9]$/.test(e.key)) {
-        e.preventDefault();
-        const t = ordered[Number(e.key) - 1];
-        if (t) selected = t;
       }
     };
     window.addEventListener("keydown", onkey);
@@ -544,17 +565,10 @@
     return "Добрый вечер";
   }
 
-  function hotkeyOf(t: Task): string | undefined {
-    const i = ordered.findIndex((x) => x.id === t.id);
-    return i >= 0 && i < 9 ? `⌘${i + 1}` : undefined;
-  }
-
   function pick(t: Task, p: Project) {
     selected = t;
     projectId = p.id;
-    diffOpen = false;
     diffRepo = null;
-    editorOpen = false;
     // restore the conversation from the engine transcript on first open
     const st = th(t.id);
     if (st.items.length === 0 && !st.running) {
@@ -611,7 +625,7 @@
 
 <svelte:head><title>gcode{project ? ` · ${project.name}` : ""}</title></svelte:head>
 
-<div class="layout" class:with-ctx={!!selected || editorOpen} class:diff-wide={diffOpen || editorOpen} style="--sbw:{sbw}px; --ctxw:{ctxw}px; --diffw:{diffw}px">
+<div class="layout" class:with-ctx={!!selected} style="--sbw:{sbw}px; --ctxw:{ctxw}px">
   <aside>
     <div class="drag-strip" data-tauri-drag-region>
       {#if upd}
@@ -643,7 +657,7 @@
     </div>
 
     {#if sbMode === "files" && (filesScope === "task" ? !!selected : !!filesProject)}
-      <button class="newtask" onclick={() => { if (editorOpen) closeEditor(); else sbMode = "tasks"; }}>
+      <button class="newtask" onclick={() => (sbMode = "tasks")}>
         <svg class="ic" viewBox="0 0 16 16"><path d="M9.5 3.5 5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         К задачам
       </button>
@@ -659,14 +673,14 @@
           {#key selected.id}
             <FileTree
               lister={(rel) => taskDirList(selected!.id, rel)}
-              active={editorOpen && editorScope === "task" ? `${editorRepo}/${editorPath}` : null}
+              active={activeTab?.kind === "file" && activeTab.scope === "task" ? `${activeTab.repo}/${activeTab.path}` : null}
               onopen={(rel) => { const [r, ...rest] = rel.split("/"); openEditor(r, rest.join("/")); }}
             />
           {/key}
         {:else if filesProject}
           <FileTree
             lister={(rel) => projectDirList(filesProject!.id, rel)}
-            active={editorOpen && editorScope === "project" ? editorPath : null}
+            active={activeTab?.kind === "file" && activeTab.scope === "project" ? activeTab.path : null}
             onopen={openProjectFile}
           />
         {/if}
@@ -758,7 +772,6 @@
                     <TaskRow
                       title={t.title}
                       status={t.status}
-                      hotkey={hotkeyOf(t)}
                       time={ago(t.created_at)}
                       pinned={t.pinned}
                       active={selected?.id === t.id}
@@ -813,11 +826,6 @@
           </div>
         {/if}
       </div>
-      {#if diffOpen || editorOpen}
-        <button class="iconbtn" data-tip="Закрыть панель · Esc" aria-label="Закрыть панель" onclick={() => { if (editorOpen) closeEditor(); else diffOpen = false; }}>
-          <svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        </button>
-      {/if}
     </div>
   <main>
     {#if creating}
@@ -836,6 +844,23 @@
         {/if}
         <Badge status={cur.running ? "running" : selected.status} />
       </div>
+      {#if curTabs.length > 1}
+        <div class="tabbar">
+          {#each curTabs as t (t.id)}
+            <div class="tab" class:on={activeTab?.id === t.id}>
+              <button class="tab-main" onclick={() => selected && (activeByTask[selected.id] = t.id)}>
+                <span class="tab-ic">{t.kind === "thread" ? "💬" : t.kind === "diff" ? "±" : t.kind === "md" ? "📄" : "✎"}</span>
+                {t.title}
+              </button>
+              {#if t.id !== "thread"}
+                <button class="tab-x" aria-label="Закрыть вкладку" onclick={() => selected && closeTab(selected.id, t.id)}>×</button>
+              {/if}
+            </div>
+          {/each}
+          <span class="tab-hint">⌘⇧[ ] · ⌘W</span>
+        </div>
+      {/if}
+      {#if !activeTab || activeTab.kind === "thread"}
       <div class="thread-box" bind:this={threadBox}>
         {#if cur.items.length === 0}
           <div class="center-empty">
@@ -968,6 +993,48 @@
           </div>
         </div>
       </div>
+      {:else if activeTab.kind === "diff"}
+        <div class="dp-head">
+          <div class="dp-chips">
+            <button class="repo-chip" class:on={diffRepo === null} onclick={() => openDiff(null)}>Все</button>
+            {#if ctx}
+              {#each ctx.touched as r (r.repo)}
+                <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
+                  {r.repo} <DiffStat add={r.add} del={r.del} />
+                </button>
+              {/each}
+            {/if}
+          </div>
+        </div>
+        <DiffView
+          groups={diffGroups}
+          onsend={sendReview}
+          onselchange={(b) => (diffSelecting = b)}
+          onopen={openEditor}
+          onquote={(repo, file, from, to, code) => quoteToComposer(`${repo}/${file}:${from}${to !== from ? `–${to}` : ""}`, code)}
+        />
+      {:else if activeTab.kind === "file"}
+        {#key activeTab.id}
+          <Editor
+            content={tabContent[activeTab.id] ?? ""}
+            path={activeTab.path}
+            label={activeTab.scope === "task" ? `${activeTab.repo}/${activeTab.path}` : activeTab.path}
+            onsave={(text) => activeTab && saveEditor(activeTab, text)}
+            onquote={(from, to, code) => {
+              if (!activeTab || activeTab.kind !== "file") return;
+              quoteToComposer(
+                `${activeTab.scope === "task" ? activeTab.repo + "/" : ""}${activeTab.path}:${from}${to !== from ? `–${to}` : ""}`,
+                code,
+              );
+              if (selected) activeByTask[selected.id] = "thread";
+            }}
+          />
+        {/key}
+      {:else if activeTab.kind === "md"}
+        <div class="md-page">
+          <Md text={tabContent[activeTab.id] ?? ""} />
+        </div>
+      {/if}
     {:else}
       <div class="hub">
         <p class="hub-greet">{greet()}</p>
@@ -1019,49 +1086,7 @@
       </div>
     {/if}
   </main>
-  {#if editorOpen}
-    <aside class="ctx ctx-diff">
-      <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
-      {#key `${editorRepo}/${editorPath}`}
-        <Editor
-          content={editorContent}
-          path={editorPath}
-          label={editorScope === "task" ? `${editorRepo}/${editorPath}` : editorPath}
-          onsave={saveEditor}
-          onquote={selected
-            ? (from, to, code) =>
-                quoteToComposer(
-                  `${editorScope === "task" ? editorRepo + "/" : ""}${editorPath}:${from}${to !== from ? `–${to}` : ""}`,
-                  code,
-                )
-            : undefined}
-        />
-      {/key}
-    </aside>
-  {:else if selected && diffOpen}
-    <aside class="ctx ctx-diff">
-      <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
-      <div class="dp-head">
-        <div class="dp-chips">
-          <button class="repo-chip" class:on={diffRepo === null} onclick={() => openDiff(null)}>Все</button>
-          {#if ctx}
-            {#each ctx.touched as r (r.repo)}
-              <button class="repo-chip" class:on={diffRepo === r.repo} onclick={() => openDiff(r.repo)}>
-                {r.repo} <DiffStat add={r.add} del={r.del} />
-              </button>
-            {/each}
-          {/if}
-        </div>
-      </div>
-      <DiffView
-        groups={diffGroups}
-        onsend={sendReview}
-        onselchange={(b) => (diffSelecting = b)}
-        onopen={openEditor}
-        onquote={(repo, file, from, to, code) => quoteToComposer(`${repo}/${file}:${from}${to !== from ? `–${to}` : ""}`, code)}
-      />
-    </aside>
-  {:else if selected}
+  {#if selected}
     <aside class="ctx">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
       <div class="grp" style="margin-top:2px">Worktrees · тронутые</div>
@@ -1160,7 +1185,7 @@
       { label: "Новая задача", key: "cmd-new", hint: "⌘N", act: () => { paletteOpen = false; goHub(); } },
       { label: "Добавить проект", key: "cmd-addproj", hint: "", act: () => { paletteOpen = false; addProject(); } },
       { label: "Styleguide", key: "cmd-styleguide", hint: "", act: () => { paletteOpen = false; window.location.href = "/styleguide"; } },
-      ...ordered.map((t) => ({ label: t.title, key: `task-${t.id}`, hint: hotkeyOf(t) ?? "", act: () => { paletteOpen = false; selected = t; } })),
+      ...ordered.map((t) => ({ label: t.title, key: `task-${t.id}`, hint: "", act: () => { paletteOpen = false; selected = t; } })),
     ].filter((c) => c.label.toLowerCase().includes(palQ.toLowerCase())) as c, ci (c.key ?? `cmd-${ci}`)}
       <button class="pal-item" onclick={c.act}>
         <span>{c.label}</span>
@@ -1188,7 +1213,6 @@
     height: 100%;
   }
   .with-ctx .card { grid-template-columns: 1fr var(--ctxw, 230px); }
-  .diff-wide .card { grid-template-columns: 1fr var(--diffw, 560px); }
   .card { position: relative; }
   .card-actions {
     position: absolute;
@@ -1282,6 +1306,51 @@
   .vm-item:disabled { color: var(--text-disabled); cursor: default; }
   .vm-check { color: var(--accent); }
   .dim-arch { opacity: 0.5; }
+  .tabbar {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 14px 6px;
+    overflow-x: auto;
+  }
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    flex: none;
+  }
+  .tab.on { background: var(--surface-2); color: var(--text-primary); }
+  .tab:hover:not(.on) { background: var(--surface-1); }
+  .tab-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: 500 12px var(--font-ui);
+    padding: 4px 4px 4px 10px;
+    cursor: pointer;
+    max-width: 200px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .tab-ic { font-size: 10px; opacity: 0.8; }
+  .tab-x {
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 8px 2px 2px;
+  }
+  .tab-x:hover { color: var(--text-primary); }
+  .tab-hint { margin-left: auto; font-size: 10px; color: var(--text-disabled); flex: none; padding-right: 2px; }
+  .md-page { flex: 1; overflow-y: auto; padding: 20px 26px 40px; }
+  .md-page > :global(.md) { max-width: 860px; margin: 0 auto; }
   .m-user-wrap { display: flex; align-items: flex-start; justify-content: flex-end; gap: 6px; }
   .m-user-wrap .m-user { margin-right: 0 !important; }
   .m-agent-wrap { display: flex; align-items: flex-start; gap: 6px; }
