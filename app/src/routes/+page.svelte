@@ -1655,7 +1655,7 @@
     flex: none;
   }
   .tab-plus:hover { background: var(--surface-2); color: var(--text-primary); }
-  .thmenu-fixed { position: fixed; min-width: 260px; z-index: 900; }
+  .thmenu-fixed { position: fixed; width: 300px; right: auto; z-index: 900; }
   .thmenu-overlay {
     position: fixed;
     inset: 0;
