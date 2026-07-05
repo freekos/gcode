@@ -1237,7 +1237,7 @@
               </button>
             {/if}
             <button class="send" onclick={sendMsg} data-tip={cur.running ? "В очередь · ⏎" : "Отправить · ⏎"} aria-label="Отправить">
-              <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+              <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12v-7.5M4.6 7.4 8 4l3.4 3.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
             </button>
           </div>
         </div>
@@ -1323,7 +1323,7 @@
               <span style="flex:1"></span>
               <button class="engine-chip" data-tip="Движок треда" aria-label="Движок треда">◆ Claude <span class="chev2">⌄</span></button>
               <button class="send" onclick={submitHub} data-tip="Создать · ⏎" aria-label="Создать">
-                <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 12v-7.5M4.6 7.4 8 4l3.4 3.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
               </button>
             </div>
           </div>
