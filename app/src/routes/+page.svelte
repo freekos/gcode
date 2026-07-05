@@ -1218,9 +1218,6 @@
             }}
           ></textarea>
           <div class="c-row">
-            <button class="iconbtn" data-tip="Вложения — скоро" aria-label="Вложения — скоро">
-              <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-            </button>
             <button class="perm" data-tip="Права агента: авто-правки кода, git запрещён технически" aria-label="Права агента">
               <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 1.8 3 3.6v4.1c0 3 2.1 5.2 5 6.5 2.9-1.3 5-3.5 5-6.5V3.6z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
               Автопилот · без git
@@ -1318,9 +1315,6 @@
               }}
             ></textarea>
             <div class="c-row">
-              <button class="iconbtn" data-tip="Вложения — скоро" aria-label="Вложения — скоро">
-                <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              </button>
               <button class="perm" data-tip="Права агента: авто-правки кода, git запрещён технически" aria-label="Права агента">
                 <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 1.8 3 3.6v4.1c0 3 2.1 5.2 5 6.5 2.9-1.3 5-3.5 5-6.5V3.6z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
                 Автопилот · без git
