@@ -168,7 +168,7 @@
           </div>
           {#if composerAt === `${g.repo}\u0000${f.path}` && selFrom !== null}
             <div class="cbox">
-              <div class="crange mono">{g.repo}/{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · shift+клик — диапазон · Esc — отмена</div>
+              <div class="crange mono">{g.repo}/{f.path}:{selFrom}{selTo !== selFrom ? `–${selTo}` : ""} · ⏎ — в пачку · ⌘L — в промпт · Esc — отмена</div>
               <div class="cpreview mono">
                 {#each selectedCode().split("\n").slice(0, 4) as pl, pi (pi)}
                   <div class:p-add={pl.startsWith("+")} class:p-del={pl.startsWith("-")}>{pl}</div>
@@ -187,20 +187,7 @@
                   }
                 }}
               ></textarea>
-              <div class="cbar">
-                <Button variant="ghost" onclick={clearSel}>Отмена</Button>
-                {#if onquote}
-                  <Button
-                    variant="ghost"
-                    onclick={() => {
-                      if (selRepo && selFile && selFrom !== null && selTo !== null) {
-                        onquote?.(selRepo, selFile, selFrom, selTo, selectedCode());
-                        clearSel();
-                      }
-                    }}>В промпт ⌘L</Button>
-                {/if}
-                <Button variant="primary" onclick={addComment}>Добавить в пачку ⏎</Button>
-              </div>
+
             </div>
           {/if}
         {/if}
