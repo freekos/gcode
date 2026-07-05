@@ -157,7 +157,7 @@
   }
   async function newThread() {
     if (!selected) return;
-    const info = await threadNew(selected.id, `Тред ${(taskThreads[selected.id]?.length ?? 0) + 1}`);
+    const info = await threadNew(selected.id, `Тред ${(taskThreads[selected.id]?.length || 1) + 1}`);
     taskThreads[selected.id] = await threadsList(selected.id);
     openTab(selected.id, { id: `t${info.id}`, kind: "thread", title: info.title });
   }
@@ -315,10 +315,10 @@
     });
   }
 
-  let replyTo: string | null = $state(null);
+  let replies: string[] = $state([]);
 
   function quoteReply(text: string) {
-    replyTo = text;
+    replies = [...replies, text];
     if (selected) activeByTask[selected.id] = "thread";
     requestAnimationFrame(() =>
       document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus(),
@@ -511,11 +511,13 @@
     if (!selected || (!msg.trim() && attachments.length === 0)) return;
     const t = th(activeThreadKey);
     const text = msg.trim();
-    if (replyTo !== null) {
-      const quote = replyTo.split("\n").slice(0, 8).map((l) => `> ${l}`).join("\n");
-      const full = `${quote}\n\n${text}`;
-      const item: ThreadItem = { kind: "reply", text: JSON.stringify({ quote: replyTo, text }) };
-      replyTo = null;
+    if (replies.length > 0) {
+      const quotes = replies
+        .map((r) => r.split("\n").slice(0, 8).map((l) => `> ${l}`).join("\n"))
+        .join("\n\n");
+      const full = `${quotes}\n\n${text}`;
+      const item: ThreadItem = { kind: "reply", text: JSON.stringify({ quotes: replies, text }) };
+      replies = [];
       msg = "";
       if (t.running) {
         t.queue.push(full);
@@ -1050,11 +1052,21 @@
           {#each curTabs as t (t.id)}
             <div class="tab" class:on={activeTab?.id === t.id}>
               <button class="tab-main" onclick={() => selected && (activeByTask[selected.id] = t.id)}>
-                <span class="tab-ic">{t.kind === "thread" ? "💬" : t.kind === "diff" ? "±" : t.kind === "md" ? "📄" : "✎"}</span>
+                {#if t.kind === "thread"}
+                  <svg class="tab-svg" viewBox="0 0 16 16"><path d="M2.5 4.6c0-1 .8-1.8 1.8-1.8h7.4c1 0 1.8.8 1.8 1.8v4.6c0 1-.8 1.8-1.8 1.8H7l-2.8 2.3v-2.3H4.3c-1 0-1.8-.8-1.8-1.8z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+                {:else if t.kind === "diff"}
+                  <svg class="tab-svg" viewBox="0 0 16 16"><path d="M5 2.5v6M2.5 5.5h5M5 11v2.5M10.5 12.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M11.5 2.5 8 13.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/></svg>
+                {:else if t.kind === "md"}
+                  <svg class="tab-svg" viewBox="0 0 16 16"><path d="M4 2.2h5.4L12.8 5.6V13c0 .5-.4.9-.9.9H4c-.5 0-.9-.4-.9-.9V3.1c0-.5.4-.9.9-.9z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M5.6 8.2h4.8M5.6 10.6h3.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+                {:else}
+                  <svg class="tab-svg" viewBox="0 0 16 16"><path d="M10.8 2.8l2.4 2.4L6 12.4l-3 .6.6-3z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+                {/if}
                 {t.title}
               </button>
               {#if t.id !== "thread"}
                 <button class="tab-x" aria-label="Закрыть вкладку" onclick={() => selected && closeTab(selected.id, t.id)}>×</button>
+              {:else}
+                <span class="tab-x-spacer"></span>
               {/if}
             </div>
           {/each}
@@ -1138,7 +1150,9 @@
               {@const rq = JSON.parse(b.item.text)}
               <div class="m-user-wrap" data-midx={b.idx}>
                 <div class="m-user">
-                  <div class="rq-quote">{rq.quote.split("\n").slice(0, 4).join("\n")}</div>
+                  {#each rq.quotes ?? [rq.quote] as q, qi (qi)}
+                    <div class="rq-quote">{q.split("\n").slice(0, 4).join("\n")}</div>
+                  {/each}
                   {rq.text}
                 </div>
               </div>
@@ -1154,13 +1168,15 @@
       </div>
       <div class="composer">
         <div class="c-inner glass-rim">
-          {#if replyTo !== null}
+          {#if replies.length}
             <div class="att-row">
-              <span class="reply-card">
-                <span class="rq-bar"></span>
-                <span class="rq-text">{replyTo.split("\n")[0].slice(0, 90)}</span>
-                <button class="x" aria-label="Убрать цитату" onclick={() => (replyTo = null)}>×</button>
-              </span>
+              {#each replies as r, i (i)}
+                <span class="reply-card">
+                  <span class="rq-bar"></span>
+                  <span class="rq-text">{r.split("\n")[0].slice(0, 70)}</span>
+                  <button class="x" aria-label="Убрать цитату" onclick={() => (replies = replies.filter((_, j) => j !== i))}>×</button>
+                </span>
+              {/each}
             </div>
           {/if}
           {#if attachments.length}
@@ -1555,38 +1571,52 @@
   .tab {
     display: inline-flex;
     align-items: center;
+    height: 28px;
     border-radius: 8px;
+    border: 1px solid transparent;
     background: transparent;
     color: var(--text-muted);
     flex: none;
+    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
   }
-  .tab.on { background: var(--surface-2); color: var(--text-primary); }
-  .tab:hover:not(.on) { background: var(--surface-1); }
+  .tab.on {
+    background: var(--surface-2);
+    border-color: var(--border-subtle);
+    color: var(--text-primary);
+  }
+  .tab:hover:not(.on) { background: var(--surface-1); color: var(--text-secondary); }
   .tab-main {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     border: 0;
     background: transparent;
     color: inherit;
     font: 500 12px var(--font-ui);
-    padding: 4px 4px 4px 10px;
+    padding: 0 2px 0 11px;
+    height: 100%;
     cursor: pointer;
     max-width: 200px;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .tab-ic { font-size: 10px; opacity: 0.8; }
+  .tab-svg { width: 13px; height: 13px; flex: none; opacity: 0.75; }
+  .tab.on .tab-svg { opacity: 1; }
+  /* × only on hover, space reserved — the tab never changes width */
   .tab-x {
     border: 0;
     background: transparent;
     color: var(--text-muted);
     font-size: 13px;
     cursor: pointer;
-    padding: 2px 8px 2px 2px;
+    padding: 0 9px 0 3px;
+    height: 100%;
+    visibility: hidden;
   }
+  .tab:hover .tab-x, .tab.on .tab-x { visibility: visible; }
   .tab-x:hover { color: var(--text-primary); }
+  .tab-x-spacer { width: 9px; }
   .tab-plus {
     border: 0;
     background: transparent;
