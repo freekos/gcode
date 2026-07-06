@@ -372,15 +372,34 @@
   });
   let diffRepo: string | null = $state(null); // null = все репо
   let diffGroups: DiffGroup[] = $state([]);
+  let changesOpen = $state(false);
+  let changedFiles: { repo: string; path: string; add: number; del: number }[] = $state([]);
 
-  async function openDiff(repo?: string | null) {
+  async function openDiff(repo?: string | null, focusFile?: string) {
     if (!selected) return;
     diffRepo = repo ?? null;
     openTab(selected.id, { id: "diff", kind: "diff", title: "Изменения" });
     const repos = diffRepo ? [diffRepo] : (ctx?.touched.map((r) => r.repo) ?? []);
     const sel = selected;
-    diffGroups = await Promise.all(
+    let groups = await Promise.all(
       repos.map(async (r) => ({ repo: r, files: await taskDiff(sel.id, r) })),
+    );
+    if (focusFile) {
+      groups = groups.map((g) => ({ ...g, files: g.files.filter((f) => f.path === focusFile) }));
+    }
+    diffGroups = groups;
+  }
+
+  // "Изменения" card expands with the file list right in the panel (canvas decision)
+  async function toggleChanges() {
+    changesOpen = !changesOpen;
+    if (!changesOpen || !selected || !ctx) return;
+    const sel = selected;
+    const groups = await Promise.all(
+      ctx.touched.map(async (r) => ({ repo: r.repo, files: await taskDiff(sel.id, r.repo) })),
+    );
+    changedFiles = groups.flatMap((g) =>
+      g.files.map((f) => ({ repo: g.repo, path: f.path, add: f.add, del: f.del })),
     );
   }
 
@@ -1367,48 +1386,72 @@
   {#if selected}
     <aside class="ctx">
       <div class="ctx-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели" onpointerdown={startCtxResize}></div>
-      <div class="grp" style="margin-top:2px">Цель</div>
-      {#if ctx && ctx.progress.length}
-        {@const done = ctx.progress.filter((p) => p.done).length}
-        <button class="nav-link" onclick={openProgressTab}>
-          {ctx.progress.find((p) => !p.done)?.text ?? "всё отмечено"}
-          <span class="mut">{done}/{ctx.progress.length} · открыть →</span>
-        </button>
-      {:else}
-        <button class="nav-link" onclick={openProgressTab}><span class="mut">PROGRESS.md · открыть →</span></button>
-      {/if}
-
-      <div class="grp">Изменения</div>
-      {#if ctx && ctx.touched.length > 0}
-        <button class="all-diff" onclick={() => openDiff(null)}>Все изменения задачи →</button>
-        {#each ctx.touched as r (r.repo)}
-          <button class="repo repo-btn" onclick={() => openDiff(r.repo)} data-tip="Открыть дифф" aria-label="Открыть дифф">
-            <div class="rn">{r.repo}</div>
-            <div class="rrow">
-              <span class="mut">✎ {r.files}</span>
-              <DiffStat add={r.add} del={r.del} />
-            </div>
+      <div class="nav-card">
+        <div class="nc-head"><span>Прогресс</span></div>
+        {#if ctx && ctx.progress.length}
+          {@const done = ctx.progress.filter((p) => p.done).length}
+          <div class="nc-stepper">
+            {#each ctx.progress.slice(0, 6) as p, i (i)}
+              {#if i > 0}<span class="nc-line"></span>{/if}
+              <span class="nc-step" class:done={p.done}>{#if p.done}✓{/if}</span>
+            {/each}
+          </div>
+          <button class="nav-link" onclick={openProgressTab}>
+            {ctx.progress.find((p) => !p.done)?.text ?? "всё отмечено"}
+            <span class="mut">{done}/{ctx.progress.length} · PROGRESS.md · открыть →</span>
           </button>
-        {/each}
-        {#if ctx.untouched}
-          <p class="mut" style="margin:4px 2px">ещё {ctx.untouched} не тронуты ›</p>
+        {:else}
+          <button class="nav-link" onclick={openProgressTab}><span class="mut">PROGRESS.md пуст — агент заполнит план · открыть →</span></button>
         {/if}
-      {:else}
-        <p class="mut" style="margin:4px 2px">пока без изменений</p>
-      {/if}
+      </div>
 
-      {#if knowledgeFiles.length}
-        <div class="grp">Файлы проекта</div>
-        {#each knowledgeFiles as f (f)}
-          <button class="nav-link mono-sm" onclick={() => openKnowledgeTab(f)}>{f}</button>
-        {/each}
-      {/if}
+      <div class="nav-card">
+        <button class="nc-head nc-toggle" onclick={toggleChanges}>
+          <span>Изменения</span>
+          <span class="nc-chev" class:open={changesOpen}>⌄</span>
+        </button>
+        {#if ctx && ctx.touched.length > 0}
+          {#each ctx.touched as r (r.repo)}
+            <button class="nc-row" onclick={() => openDiff(r.repo)}>
+              <span class="mono-sm">{r.repo}</span>
+              <span style="flex:1"></span>
+              <span class="mut mono-sm">✎{r.files}</span>
+              <DiffStat add={r.add} del={r.del} />
+            </button>
+          {/each}
+          {#if changesOpen}
+            <div class="nc-files">
+              {#each changedFiles as f (f.repo + f.path)}
+                <button class="nc-file" onclick={() => openDiff(f.repo, f.path)}>
+                  <span class="mono-sm nc-fp">{f.path}</span>
+                  <DiffStat add={f.add} del={f.del} />
+                </button>
+              {/each}
+              <span class="mut" style="font-size:10px">клик по файлу → его дифф вкладкой</span>
+            </div>
+          {/if}
+          <button class="nav-link" onclick={() => openDiff(null)}><span style="color:var(--accent)">Все изменения задачи →</span></button>
+          {#if ctx.untouched}
+            <p class="mut" style="margin:0;font-size:11px">ещё {ctx.untouched} не тронуты ›</p>
+          {/if}
+        {:else}
+          <p class="mut" style="margin:0;font-size:11.5px">пока без изменений</p>
+        {/if}
+      </div>
 
-      {#if selected && attLog[selected.id]?.length}
-        <div class="grp">Вложения</div>
-        {#each attLog[selected.id] as a, i (i)}
-          <button class="nav-link mono-sm" data-tip="К сообщению в треде" onclick={() => jumpToMessage(a.midx)}>📄 {a.loc}</button>
-        {/each}
+      {#if knowledgeFiles.length || (selected && attLog[selected.id]?.length)}
+        <div class="nav-card">
+          <div class="nc-head"><span>Контекст</span></div>
+          {#each knowledgeFiles as f (f)}
+            <button class="nav-link mono-sm" onclick={() => openKnowledgeTab(f)}>{f}</button>
+          {/each}
+          {#if selected && attLog[selected.id]?.length}
+            {#each attLog[selected.id] as a, i (i)}
+              <button class="nav-link mono-sm" data-tip="К сообщению в треде" onclick={() => jumpToMessage(a.midx)}>📄 {a.loc}</button>
+            {/each}
+          {/if}
+          <p class="mut" style="margin:0;font-size:10px">знания проекта и вложения задачи</p>
+        </div>
       {/if}
     </aside>
   {/if}
@@ -1717,9 +1760,56 @@
     padding: 4px 12px; cursor: pointer;
   }
   .repo-chip.on { background: var(--accent-soft); color: var(--text-primary); }
-  .repo-btn { width: 100%; border: 0; text-align: left; cursor: pointer; }
   .thread-box :global(code.md-ic) { cursor: pointer; }
   .thread-box :global(code.md-ic:hover) { background: var(--accent-soft); color: var(--text-primary); }
+  .nav-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 8px;
+  }
+  .nc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font: 600 12.5px var(--font-ui);
+    color: var(--text-primary);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-align: left;
+  }
+  .nc-toggle { cursor: pointer; }
+  .nc-chev { color: var(--text-muted); transition: transform var(--t-fast) ease-out; }
+  .nc-chev.open { transform: rotate(180deg); }
+  .nc-stepper { display: flex; align-items: center; }
+  .nc-step {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid var(--border-strong);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--status-done); flex: none;
+  }
+  .nc-step.done { border-color: var(--status-done); }
+  .nc-line { width: 14px; height: 1.5px; background: var(--border-strong); flex: none; }
+  .nc-row {
+    display: flex; align-items: center; gap: 7px;
+    background: transparent; border: 0; padding: 3px 4px;
+    border-radius: var(--r-md); cursor: pointer; color: var(--text-secondary);
+    text-align: left; width: 100%;
+  }
+  .nc-row:hover { background: var(--surface-2); }
+  .nc-files { display: flex; flex-direction: column; gap: 2px; padding-left: 6px; }
+  .nc-file {
+    display: flex; align-items: center; gap: 8px;
+    background: transparent; border: 0; padding: 3px 6px;
+    border-radius: var(--r-md); cursor: pointer; text-align: left; width: 100%;
+  }
+  .nc-file:hover { background: var(--surface-2); }
+  .nc-fp { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
   .nav-link {
     display: flex;
     flex-direction: column;
@@ -1743,21 +1833,6 @@
     0% { background: var(--accent-soft); border-radius: var(--r-md); }
     100% { background: transparent; }
   }
-  .all-diff {
-    width: 100%;
-    background: var(--accent-soft);
-    border: 0;
-    border-radius: var(--r-md);
-    color: var(--text-primary);
-    font: 500 12px var(--font-ui);
-    padding: 7px 10px;
-    cursor: pointer;
-    margin-bottom: 8px;
-    text-align: left;
-    transition: filter var(--t-fast) ease-out;
-  }
-  .all-diff:hover { filter: brightness(1.15); }
-  .repo-btn:hover { background: var(--surface-3); }
   .skel {
     display: inline-block;
     border-radius: 6px;
@@ -2183,9 +2258,6 @@
     z-index: 40;
   }
   :global(:root.native) .ctx { background: color-mix(in oklab, var(--surface-1) 70%, transparent); }
-  .repo { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 8px; }
-  .rn { font-family: var(--font-mono); font-size: 11.5px; }
-  .rrow { display: flex; gap: 10px; margin-top: 3px; align-items: center; }
   .pal-input {
     width: 100%; font: 14px var(--font-ui); color: var(--text-primary);
     background: var(--surface-2); border: 1px solid var(--border-subtle);
