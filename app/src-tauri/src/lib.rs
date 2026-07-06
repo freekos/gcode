@@ -226,13 +226,32 @@ fn thread_send(
                 .next();
             match existing {
                 Some(t) => t,
-                None => app
-                    .handle
-                    .call({
-                        let title: String = prompt.chars().take(48).collect();
-                        move |st| st.add_thread(task_id, "claude", &title)
-                    })
-                    .map_err(err_s)?,
+                None => {
+                    let t = app
+                        .handle
+                        .call({
+                            let title: String = prompt.chars().take(48).collect();
+                            move |st| st.add_thread(task_id, "claude", &title)
+                        })
+                        .map_err(err_s)?;
+                    // AI-name the thread from the first message (like chat apps)
+                    let handle = app.handle.clone();
+                    let ah = app_handle.clone();
+                    let p2 = prompt.clone();
+                    let tid0 = t.id;
+                    std::thread::spawn(move || {
+                        let names =
+                            namer::suggest_names("claude", &p2, std::time::Duration::from_secs(20));
+                        if names.ai {
+                            let title = names.title.clone();
+                            handle.call(move |st| {
+                                let _ = st.set_thread_title(tid0, &title);
+                            });
+                            let _ = ah.emit("threads-changed", serde_json::json!({ "task_id": task_id }));
+                        }
+                    });
+                    t
+                }
             }
         }
     };
@@ -465,6 +484,24 @@ fn project_dir_list(
 }
 
 /// PROGRESS.md of the task (goal/checklist file in the task root).
+/// Read a user-picked file to attach to the prompt (size-capped, text only).
+#[tauri::command]
+fn attach_read(path: String) -> Result<serde_json::Value, String> {
+    let p = std::path::Path::new(&path);
+    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(path.clone());
+    let meta = std::fs::metadata(p).map_err(|e| e.to_string())?;
+    if meta.len() > 256 * 1024 {
+        return Ok(serde_json::json!({ "name": name, "text": null, "reason": "файл больше 256KB — приложи путь" }));
+    }
+    match std::fs::read_to_string(p) {
+        Ok(t) => {
+            let capped: String = t.lines().take(400).collect::<Vec<_>>().join("\n");
+            Ok(serde_json::json!({ "name": name, "text": capped }))
+        }
+        Err(_) => Ok(serde_json::json!({ "name": name, "text": null, "reason": "бинарный файл" })),
+    }
+}
+
 #[tauri::command]
 fn progress_read(app: TState<'_, App>, task_id: i64) -> Result<String, String> {
     let root = gcode_core::runner::task_root(&app.handle, task_id).map_err(err_s)?;
@@ -586,6 +623,7 @@ pub fn run() {
             project_dir_list,
             task_dir_list,
             progress_read,
+            attach_read,
             project_file_read,
             project_file_write,
             logs_export,

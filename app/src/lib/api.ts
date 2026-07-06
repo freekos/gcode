@@ -432,4 +432,20 @@ export async function progressRead(taskId: number): Promise<string> {
   return invoke<string>("progress_read", { taskId });
 }
 
+export async function onThreadsChanged(cb: (e: { task_id: number }) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return await listen<{ task_id: number }>("threads-changed", (ev) => cb(ev.payload));
+}
+
+/** [+] in the composer: system file picker -> attachment chip {loc, code}. */
+export async function pickAttachment(): Promise<{ loc: string; code: string } | null> {
+  if (!inTauri) return { loc: "LOYALTY_SPEC.md", code: "# демо-вложение\n…" };
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const path = await open({ multiple: false, directory: false, title: "Файл к промпту" });
+  if (typeof path !== "string") return null;
+  const r = await invoke<{ name: string; text: string | null; reason?: string }>("attach_read", { path });
+  return { loc: r.name, code: r.text ?? `[${r.reason}]\nпуть: ${path}` };
+}
+
 export const isDemo = !inTauri;

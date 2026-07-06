@@ -15,6 +15,8 @@
     threadStop,
     threadsList,
     threadNew,
+    onThreadsChanged,
+    pickAttachment,
     type ThreadInfo,
     onThreadEvent,
     onTasksChanged,
@@ -52,7 +54,7 @@
   import FileTree from "$lib/components/FileTree.svelte";
   import Md from "$lib/components/Md.svelte";
 
-  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped" | "uquote" | "reply"; text: string };
+  type ThreadItem = { kind: "user" | "agent" | "tool" | "error" | "turn" | "review" | "stopped" | "uquote" | "reply" | "changed"; text: string };
   type ThreadState = {
     items: ThreadItem[];
     running: boolean;
@@ -634,6 +636,8 @@
       if (e.ok === false) {
         if (wasStopped) t.items.push({ kind: "stopped", text: "" });
         else t.items.push({ kind: "error", text: e.text || "агент завершился с ошибкой" });
+      } else if (!t.items.some((i) => i.kind === "changed")) {
+        t.items.push({ kind: "changed", text: "" });
       }
       loadCtx();
       const next = t.queue.shift();
@@ -680,6 +684,10 @@
       naming = new Set(naming);
       reload();
     }).then((u) => (unRen = u));
+    let unThr: (() => void) | undefined;
+    onThreadsChanged(async ({ task_id }) => {
+      taskThreads[task_id] = await threadsList(task_id);
+    }).then((u) => (unThr = u));
 
     const onkey = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === "n") {
@@ -721,6 +729,7 @@
       un?.();
       unThread?.();
       unRen?.();
+      unThr?.();
     };
   });
 
@@ -1063,7 +1072,9 @@
                 {:else}
                   <svg class="tab-svg" viewBox="0 0 16 16"><path d="M10.8 2.8l2.4 2.4L6 12.4l-3 .6.6-3z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
                 {/if}
-                {t.title}
+                {t.id === "thread" && selected && taskThreads[selected.id]?.length
+                  ? ([...taskThreads[selected.id]].sort((a, b) => a.created_at.localeCompare(b.created_at))[0]?.title ?? t.title)
+                  : t.title}
               </button>
               {#if t.id !== "thread"}
                 <button class="tab-x" aria-label="Закрыть вкладку" onclick={() => selected && closeTab(selected.id, t.id)}>×</button>
@@ -1087,6 +1098,9 @@
               <svg class="ic" style="width:13px;height:13px" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.8V8l2.2 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
             </button>
           {/if}
+          <button class="tab-plus" data-tip="Файлы задачи · ⌘P" aria-label="Файлы задачи" onclick={openFilePalette}>
+            <svg class="ic" style="width:13px;height:13px" viewBox="0 0 16 16"><path d="M4 2.2h5.4L12.8 5.6V13c0 .5-.4.9-.9.9H4c-.5 0-.9-.4-.9-.9V3.1c0-.5.4-.9.9-.9z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="m7 8 1.2 1.2L10.4 7" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>
+          </button>
           <span class="tab-hint">⌘⇧[ ] · ⌘W</span>
         </div>
       {/if}
@@ -1172,6 +1186,21 @@
                   {rq.text}
                 </div>
               </div>
+            {:else if b.item.kind === "changed"}
+              {#if ctx && ctx.touched.length}
+                <div class="m-changed">
+                  <div class="mc-head">ИЗМЕНИЛ ФАЙЛЫ · клик → дифф</div>
+                  <div class="mc-row">
+                    {#each ctx.touched as r (r.repo)}
+                      <button class="mc-item" onclick={() => openDiff(r.repo)}>
+                        <span class="mono-sm">{r.repo}</span>
+                        <span class="mut mono-sm">✎{r.files}</span>
+                        <DiffStat add={r.add} del={r.del} />
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
             {:else if b.item.kind === "stopped"}
               <div class="m-stop">⏹ Остановлено</div>
             {:else if b.item.kind === "turn"}
@@ -1218,6 +1247,9 @@
             }}
           ></textarea>
           <div class="c-row">
+            <button class="iconbtn" data-tip="Приложить файл к промпту" aria-label="Приложить файл" onclick={async () => { const a = await pickAttachment(); if (a) { attachments = [...attachments, a]; } }}>
+              <svg class="ic" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
             <button class="perm" data-tip="Права агента: авто-правки кода, git запрещён технически" aria-label="Права агента">
               <svg class="ic" style="color:inherit" viewBox="0 0 16 16"><path d="M8 1.8 3 3.6v4.1c0 3 2.1 5.2 5 6.5 2.9-1.3 5-3.5 5-6.5V3.6z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
               Автопилот · без git
@@ -2053,6 +2085,25 @@
     margin: 4px 0 0;
   }
   .m-stop { color: var(--text-muted); font-size: 12px; }
+  .m-changed {
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg);
+    padding: 8px 12px;
+  }
+  .mc-head { font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 5px; }
+  .mc-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mc-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--surface-2);
+    border: 0;
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .mc-item:hover { filter: brightness(1.15); }
   .att-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 12px 0; }
   .reply-card {
     display: inline-flex;

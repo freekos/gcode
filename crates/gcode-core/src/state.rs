@@ -584,6 +584,18 @@ impl State {
         Ok(rows)
     }
 
+    /// Rename a thread (AI naming from the first message, like chat apps).
+    pub fn set_thread_title(&mut self, thread_id: i64, title: &str) -> Result<()> {
+        let n = self.conn.execute(
+            "UPDATE threads SET title = ?2 WHERE id = ?1",
+            params![thread_id, title],
+        )?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("thread #{thread_id}")));
+        }
+        Ok(())
+    }
+
     /// Record the engine-assigned session id (first run of a thread) + touch activity.
     pub fn set_thread_session(&mut self, thread_id: i64, session_id: &str) -> Result<()> {
         let n = self.conn.execute(
